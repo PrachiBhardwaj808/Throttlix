@@ -1,0 +1,114 @@
+# =============================================================================
+# Throttlix .gitignore
+# Covers Java, Maven, Node, React, Vite, IDEs, and OS-generated files
+# =============================================================================
+
+# --- Compiled Java Class files ---
+*.class
+
+# --- Log files ---
+*.log
+*.log.*
+
+# --- BlueJ files ---
+*.ctxt
+
+# --- Mobile Tools for Java (J2ME) ---
+.mtj.tmp/
+
+# --- Package Files ---
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# --- Virtual machines / crash logs ---
+hs_err_pid*
+replay_pid*
+
+# --- Maven Build Artifacts ---
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# --- Node.js & Frontend Build Outputs ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+frontend/dist/
+frontend/dist-ssr/
+frontend/node_modules/
+dist/
+dist-ssr/
+
+# --- Vite / Cache ---
+.vite/
+*.local
+
+# --- IDE & Editor Artifacts ---
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Eclipse
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.recommenders
+
+# Visual Studio Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# --- Operating System Files ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+[Dd]esktop.ini
+
+# --- Environment & Secret files ---
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
