@@ -1,15 +1,65 @@
 -- =============================================================================
--- Throttlix — Database Schema
+-- Throttlix — Database Schema DDL
 -- Database: PostgreSQL 15+
--- Description: Core tables, indexes, and constraints for API traffic management,
---              rate limiting policies, API keys, and request metrics.
+-- Description: Core tables, constraints, and indexes for API traffic governance,
+--              API key authentication, rate-limiting policies, and request telemetry.
 -- =============================================================================
 
--- 1. Extensions (e.g. "uuid-ossp", "pgcrypto")
+-- 1. Clients Table
+CREATE TABLE IF NOT EXISTS clients (
+    client_id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
--- 2. API Keys & Clients Schema
+-- 2. API Keys Table
+CREATE TABLE IF NOT EXISTS api_keys (
+    api_key_id BIGSERIAL PRIMARY KEY,
+    client_id BIGINT NOT NULL REFERENCES clients(client_id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    key_hash VARCHAR(64) NOT NULL UNIQUE,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    revoked_at TIMESTAMPTZ
+);
 
--- 3. Rate Limiting Rules & Tier Policies Schema
+CREATE INDEX IF NOT EXISTS idx_api_keys_hash 
+    ON api_keys(key_hash) WHERE active = TRUE;
 
--- 4. Audit & Traffic Metrics Schema
+-- 3. Rate Limit Policies Table
+CREATE TABLE IF NOT EXISTS rate_limit_policies (
+    policy_id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    algorithm VARCHAR(30) NOT NULL CHECK (algorithm IN ('TOKEN_BUCKET', 'SLIDING_WINDOW')),
+    request_limit INTEGER NOT NULL CHECK (request_limit > 0),
+    window_seconds INTEGER NOT NULL CHECK (window_seconds > 0),
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
+-- 4. Client Policies Junction Table
+CREATE TABLE IF NOT EXISTS client_policies (
+    client_id BIGINT PRIMARY KEY REFERENCES clients(client_id) ON DELETE CASCADE,
+    policy_id BIGINT NOT NULL REFERENCES rate_limit_policies(policy_id) ON DELETE RESTRICT,
+    assigned_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 5. Request Telemetry & Audit Logs Table
+CREATE TABLE IF NOT EXISTS request_logs (
+    log_id BIGSERIAL PRIMARY KEY,
+    client_id BIGINT REFERENCES clients(client_id) ON DELETE SET NULL,
+    api_key_id BIGINT REFERENCES api_keys(api_key_id) ON DELETE SET NULL,
+    endpoint VARCHAR(255) NOT NULL,
+    http_method VARCHAR(10) NOT NULL,
+    status_code INTEGER NOT NULL,
+    allowed BOOLEAN NOT NULL,
+    latency_ms INTEGER NOT NULL,
+    requested_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_request_logs_client_time 
+    ON request_logs (client_id, requested_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_request_logs_analytics 
+    ON request_logs (requested_at DESC, allowed);
