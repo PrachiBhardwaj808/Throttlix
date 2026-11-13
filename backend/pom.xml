@@ -62,7 +62,7 @@
     </dependencies>
 
     <build>
-        <finalName>throttlix</finalName>
+        <finalName>throttlix-backend</finalName>
         <plugins>
             <!-- Maven Compiler Plugin configured for Java 21 -->
             <plugin>
