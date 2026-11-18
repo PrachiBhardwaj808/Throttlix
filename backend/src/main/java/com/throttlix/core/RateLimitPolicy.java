@@ -3,61 +3,74 @@ package com.throttlix.core;
 import java.util.Objects;
 
 /**
- * Configuration model for rate-limiting rules in Throttlix.
+ * Configuration model defining the rate-limiting rules for a client in Throttlix.
  *
- * <p>This is a shared model used by both:
+ * <p>This shared model is used by both:
  * <ul>
  *   <li><b>Token Bucket</b> (implemented by Prachi)</li>
  *   <li><b>Sliding Window</b> (implemented by Akshit)</li>
  * </ul>
  *
+ * <h3>Why Token Bucket and Sliding Window Require Different Configurations:</h3>
+ * <ul>
+ *   <li><b>Token Bucket</b> works with a bucket of tokens that replenishes over time.
+ *       It needs to know:
+ *       <ol>
+ *         <li>How many tokens the bucket can hold at most (capacity).</li>
+ *         <li>How many tokens to add back (refill tokens).</li>
+ *         <li>How often to add those tokens (refill interval in milliseconds).</li>
+ *       </ol>
+ *       It does <i>not</i> use a fixed observation window, so {@code windowDurationMillis} is unused (0).
+ *   </li>
+ *   <li><b>Sliding Window</b> works by counting timestamps within a moving time window.
+ *       It needs to know:
+ *       <ol>
+ *         <li>The maximum number of requests allowed in that window.</li>
+ *         <li>The length of the moving window in milliseconds (e.g., 60,000 ms for 1 minute).</li>
+ *       </ol>
+ *       It does <i>not</i> have tokens or a refill cycle, so {@code refillTokens} and {@code refillDurationMillis} are unused (0).
+ *   </li>
+ * </ul>
+ *
  * <h3>Meaning of {@code limit} in Both Algorithms:</h3>
  * <ul>
  *   <li><b>Token Bucket:</b> {@code limit} represents the <i>maximum bucket capacity</i>
- *       (the maximum number of tokens the bucket can hold, allowing bursts up to this number).</li>
+ *       (maximum tokens allowed in the bucket, permitting bursts up to this limit).</li>
  *   <li><b>Sliding Window:</b> {@code limit} represents the <i>maximum allowed requests</i>
  *       within the moving time window defined by {@code windowDurationMillis}.</li>
- * </ul>
- *
- * <h3>Algorithm-Specific Fields:</h3>
- * <ul>
- *   <li>For <b>Token Bucket</b>: {@code refillTokens} and {@code refillDurationMillis} define how
- *       quickly tokens replenish. {@code windowDurationMillis} is not used (set to 0).</li>
- *   <li>For <b>Sliding Window</b>: {@code windowDurationMillis} defines the window size in milliseconds.
- *       {@code refillTokens} and {@code refillDurationMillis} are not used (set to 0).</li>
  * </ul>
  */
 public class RateLimitPolicy {
 
-    // Identity and algorithm
+    // Identity and algorithm selection
     private final String policyId;
     private final String clientId;
     private final AlgorithmType algorithmType;
 
-    // Core limit parameter
+    // Core limit parameter (dual meaning depending on algorithm)
     private final int limit;
 
-    // Sliding Window specific (unused for Token Bucket)
+    // Sliding Window specific (unused for Token Bucket, set to 0)
     private final long windowDurationMillis;
 
-    // Token Bucket specific (unused for Sliding Window)
+    // Token Bucket specific (unused for Sliding Window, set to 0)
     private final int refillTokens;
     private final long refillDurationMillis;
 
-    // Status flag
+    // Operational switch
     private final boolean enabled;
 
     /**
-     * Primary constructor with strict validation.
+     * Primary constructor with complete parameter validation.
      *
      * @param policyId             unique identifier for this policy (e.g., "policy-standard-tier")
-     * @param clientId             client or API key identifier associated with this policy (e.g., "client-acme")
-     * @param algorithmType        the algorithm to use (TOKEN_BUCKET or SLIDING_WINDOW)
+     * @param clientId             client or API key identifier (e.g., "client-acme-corp")
+     * @param algorithmType        the rate-limiting algorithm (TOKEN_BUCKET or SLIDING_WINDOW)
      * @param limit                burst capacity (Token Bucket) or max requests per window (Sliding Window)
-     * @param windowDurationMillis window duration in milliseconds (required for Sliding Window, 0 for Token Bucket)
-     * @param refillTokens         tokens added per refill cycle (required for Token Bucket, 0 for Sliding Window)
-     * @param refillDurationMillis duration of each refill cycle in milliseconds (required for Token Bucket, 0 for Sliding Window)
-     * @param enabled              whether this policy is currently active
+     * @param windowDurationMillis window length in milliseconds (required for Sliding Window; 0 for Token Bucket)
+     * @param refillTokens         tokens added per refill cycle (required for Token Bucket; 0 for Sliding Window)
+     * @param refillDurationMillis duration of refill cycle in milliseconds (required for Token Bucket; 0 for Sliding Window)
+     * @param enabled              true if policy is actively enforced; false if disabled
      */
     public RateLimitPolicy(
             String policyId,
@@ -85,7 +98,7 @@ public class RateLimitPolicy {
             throw new IllegalArgumentException("limit must be greater than 0");
         }
 
-        // 4. Algorithm-specific validation
+        // 4. Algorithm-specific validation rules
         if (algorithmType == AlgorithmType.SLIDING_WINDOW) {
             if (windowDurationMillis <= 0) {
                 throw new IllegalArgumentException("windowDurationMillis must be greater than 0 for Sliding Window");
@@ -114,14 +127,14 @@ public class RateLimitPolicy {
     }
 
     /**
-     * Convenience factory method to create a Token Bucket policy.
+     * Convenience factory method for constructing a Token Bucket policy.
      *
      * @param policyId             unique identifier for this policy
      * @param clientId             client identifier
-     * @param capacity             maximum bucket token capacity
-     * @param refillTokens         tokens refilled per period
-     * @param refillDurationMillis refill period duration in milliseconds
-     * @return a configured RateLimitPolicy for Token Bucket
+     * @param capacity             maximum bucket capacity (limit)
+     * @param refillTokens         tokens added per refill interval
+     * @param refillDurationMillis duration of the refill interval in milliseconds
+     * @return a configured, validated Token Bucket policy
      */
     public static RateLimitPolicy createTokenBucketPolicy(
             String policyId,
@@ -142,13 +155,13 @@ public class RateLimitPolicy {
     }
 
     /**
-     * Convenience factory method to create a Sliding Window policy.
+     * Convenience factory method for constructing a Sliding Window policy.
      *
      * @param policyId             unique identifier for this policy
      * @param clientId             client identifier
-     * @param maxRequests          maximum allowed requests within the window
-     * @param windowDurationMillis length of the sliding window in milliseconds
-     * @return a configured RateLimitPolicy for Sliding Window
+     * @param maxRequests          maximum allowed requests within the window (limit)
+     * @param windowDurationMillis window duration in milliseconds
+     * @return a configured, validated Sliding Window policy
      */
     public static RateLimitPolicy createSlidingWindowPolicy(
             String policyId,
