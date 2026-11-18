@@ -32,18 +32,17 @@ The per-client lock makes pruning, counting, deciding, and recording one atomic 
 | Shared rate-limit contract | Review timestamp and result behavior; use the agreed models | Own shared policy, result, and interface models | Shared contract is on `main` |
 | Token Bucket (FR-03) | Review compatibility during integration | Implement bucket state, refill, consumption, and retry behavior | Prachi's implementation and validation remain to be confirmed |
 | Sliding Window (FR-04) | Implement per-client timestamp state and rolling-window decisions | Review compatibility with the shared models | Implementation merged to `main`; validation remains |
-| Algorithm tests | Add controlled-time boundary, expiry, limit, retry, and per-client tests | Add Token Bucket refill, capacity, and client-isolation tests | Pending for both |
+| Algorithm tests | Add controlled-time boundary, expiry, limit, retry, and per-client tests | Add Token Bucket refill, capacity, and client-isolation tests | Akshit's JUnit coverage merged; Prachi's validation remains |
 | Concurrency and simulation | Validate that parallel requests cannot exceed the limit; build traffic simulation and compare algorithms | Support integration and validate Token Bucket behavior | Pending |
 | Common integration and demo | Exercise both algorithms through the shared interface and help document results | Integrate both algorithms and coordinate the demo | Pending until both implementations and tests are ready |
 
 ## Akshit's remaining work
 
-1. Add controlled-time tests for allowed requests, limit reached, expired timestamps, exact window boundary, retry delay, separate clients, disabled/wrong policies, and backwards time.
-2. Add a concurrent-request test proving that no more than the configured limit is accepted for one client.
-3. Build the planned traffic simulator and compare Sliding Window with Token Bucket using the same request patterns.
-4. Coordinate with Prachi to verify both algorithms use the shared models and compile together; record any integration issues and demo results.
-5. Update this page as each item is completed and link the corresponding merged PRs.
+1. Run the JUnit test suite in an environment with Maven and report its result.
+2. Build the planned traffic simulator and compare Sliding Window with Token Bucket using the same request patterns.
+3. Coordinate with Prachi to verify both algorithms use the shared models and compile together; record any integration issues and demo results.
+4. Update this page as each item is completed and link the corresponding merged PRs.
 
 ## Validation status
 
-The Sliding Window source and shared core classes were compiled together with `javac` in the development environment. Maven validation was not run because `mvn` was unavailable there. Automated algorithm tests have not yet been added.
+The Sliding Window source and shared core classes compile with `javac --release 21`. A temporary executable smoke check passed the request-limit, expiry-boundary, and client-isolation scenarios. JUnit tests now cover limits, remaining capacity, expiry, retry delay, client isolation, backwards time, invalid/disabled policies, and concurrent requests. The JUnit suite and full Maven build have not run because Maven is unavailable in the development environment.
