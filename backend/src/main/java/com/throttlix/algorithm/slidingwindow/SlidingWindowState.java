@@ -41,4 +41,9 @@ public class SlidingWindowState {
     public synchronized Long getOldestRequestTimestamp() {
         return requestTimestamps.peekFirst();
     }
+
+    /** Returns the newest stored timestamp, or null when there are no requests. */
+    public synchronized Long getLatestRequestTimestamp() {
+        return requestTimestamps.peekLast();
+    }
 }
