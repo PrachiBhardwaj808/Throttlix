@@ -5,17 +5,22 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.throttlix</groupId>
-    <artifactId>throttlix-backend</artifactId>
+    <artifactId>throttlix</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <packaging>war</packaging>
 
-    <name>Throttlix Backend</name>
+    <name>Throttlix</name>
     <description>Throttlix — Intelligent API Traffic Management and Rate Limiting Platform</description>
 
     <properties>
+        <!-- Character Encoding -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+        <!-- Java 21 Compiler Release -->
         <maven.compiler.release>21</maven.compiler.release>
+
+        <!-- Dependency Versions -->
         <jakarta.servlet-api.version>6.0.0</jakarta.servlet-api.version>
         <postgresql.version>42.7.3</postgresql.version>
         <junit.jupiter.version>5.10.2</junit.jupiter.version>
@@ -23,7 +28,7 @@
     </properties>
 
     <dependencies>
-        <!-- Jakarta Servlet API (Provided by Tomcat 10.1+) -->
+        <!-- Jakarta Servlet API (Provided scope for Tomcat 10.1+ runtime) -->
         <dependency>
             <groupId>jakarta.servlet</groupId>
             <artifactId>jakarta.servlet-api</artifactId>
@@ -31,7 +36,7 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- PostgreSQL JDBC Driver -->
+        <!-- PostgreSQL JDBC Driver (For upcoming persistence tasks) -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
@@ -62,7 +67,7 @@
     </dependencies>
 
     <build>
-        <finalName>throttlix-backend</finalName>
+        <finalName>throttlix</finalName>
         <plugins>
             <!-- Maven Compiler Plugin configured for Java 21 -->
             <plugin>
@@ -74,7 +79,17 @@
                 </configuration>
             </plugin>
 
-            <!-- Maven WAR Plugin configured for Tomcat 10.1+ deployment -->
+            <!-- Exec Maven Plugin to run console application -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.2.0</version>
+                <configuration>
+                    <mainClass>com.throttlix.Main</mainClass>
+                </configuration>
+            </plugin>
+
+            <!-- Maven WAR Plugin configured for Tomcat deployment -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-war-plugin</artifactId>
@@ -84,7 +99,7 @@
                 </configuration>
             </plugin>
 
-            <!-- Maven Surefire Plugin for running tests -->
+            <!-- Maven Surefire Plugin for running automated tests -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
@@ -93,4 +108,3 @@
         </plugins>
     </build>
 </project>
-
