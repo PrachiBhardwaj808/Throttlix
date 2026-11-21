@@ -1,9 +1,4 @@
--- =============================================================================
--- Throttlix — Database Schema DDL
--- Database: PostgreSQL 15+
--- Description: Core tables, constraints, and indexes for API traffic governance,
---              API key authentication, rate-limiting policies, and request telemetry.
--- =============================================================================
+
 
 -- 1. Clients Table
 CREATE TABLE IF NOT EXISTS clients (
