@@ -10,9 +10,11 @@ import com.throttlix.core.RateLimitPolicy;
 import com.throttlix.core.RateLimitResult;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 class SlidingWindowTest {
@@ -98,24 +100,43 @@ class SlidingWindowTest {
     }
 
     @Test
-    void concurrentRequestsCannotExceedLimit() throws Exception {
+    void threeRequestLimitHoldsForOneHundredSimultaneousRequests() throws Exception {
+        assertConcurrentRequestLimit(3);
+    }
+
+    @Test
+    void oneRequestLimitHoldsForOneHundredSimultaneousRequests() throws Exception {
+        assertConcurrentRequestLimit(1);
+    }
+
+    private void assertConcurrentRequestLimit(int limit) throws Exception {
         SlidingWindow limiter = new SlidingWindow();
-        RateLimitPolicy policy = policy("client-a", 10, 10_000);
-        ExecutorService executor = Executors.newFixedThreadPool(20);
+        RateLimitPolicy policy = policy("client-a", limit, 10_000);
+        int requestCount = 100;
+        ExecutorService executor = Executors.newFixedThreadPool(requestCount);
+        CountDownLatch ready = new CountDownLatch(requestCount);
+        CountDownLatch start = new CountDownLatch(1);
+        AtomicInteger allowedCount = new AtomicInteger();
         try {
-            List<Future<Boolean>> results = new ArrayList<>();
-            for (int i = 0; i < 100; i++) {
-                results.add(executor.submit(() -> limiter.allowRequest(policy, 1_000).isAllowed()));
+            List<Future<?>> requests = new ArrayList<>();
+            for (int i = 0; i < requestCount; i++) {
+                requests.add(executor.submit(() -> {
+                    ready.countDown();
+                    start.await();
+                    if (limiter.allowRequest(policy, 1_000).isAllowed()) {
+                        allowedCount.incrementAndGet();
+                    }
+                    return null;
+                }));
             }
 
-            int allowedCount = 0;
-            for (Future<Boolean> result : results) {
-                if (result.get()) {
-                    allowedCount++;
-                }
+            ready.await();
+            start.countDown();
+            for (Future<?> request : requests) {
+                request.get();
             }
 
-            assertEquals(10, allowedCount);
+            assertEquals(limit, allowedCount.get());
         } finally {
             executor.shutdownNow();
         }
