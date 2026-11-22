@@ -1,83 +1,186 @@
+
 package com.throttlix;
 
-import com.throttlix.core.AlgorithmType;
+import com.throttlix.algorithm.slidingwindow.SlidingWindow;
+import com.throttlix.algorithm.tokenbucket.TokenBucketRateLimiter;
 import com.throttlix.core.RateLimitPolicy;
 import com.throttlix.core.RateLimitResult;
 
-/**
- * Entry point for the Throttlix console-based application.
- * Demonstrates the common core rate-limiting foundation models:
- * - {@link RateLimitPolicy} (Token Bucket & Sliding Window)
- * - {@link RateLimitResult} (Allowed & Rejected decisions)
- * - {@link AlgorithmType}
- */
 public class Main {
 
-    public static void main(String[] args) {
-        System.out.println("==========================================================");
-        System.out.println("       Throttlix — Intelligent API Traffic Manager        ");
-        System.out.println("            Core Foundation Demonstration                 ");
-        System.out.println("==========================================================");
-        System.out.println();
+        private static final String RESET = "\u001B[0m";
+        private static final String CYAN = "\u001B[36m";
+        private static final String GREEN = "\u001B[32m";
+        private static final String RED = "\u001B[31m";
+        private static final String YELLOW = "\u001B[33m";
+        private static final String BOLD = "\u001B[1m";
+        private static final String DIM = "\u001B[2m";
 
-        // 1. Demonstrate Token Bucket Policy (Prachi's algorithm configuration)
-        System.out.println("--- 1. Token Bucket Policy Configuration (Prachi) ---");
-        RateLimitPolicy tokenBucketPolicy = RateLimitPolicy.createTokenBucketPolicy(
-                "policy-tb-premium",
-                "client-analytics-service",
-                100,      // Bucket Capacity (burst limit)
-                10,       // Refill Tokens
-                1000L     // Refill Interval (every 1 second)
-        );
-        System.out.println("Policy ID:         " + tokenBucketPolicy.getPolicyId());
-        System.out.println("Client ID:         " + tokenBucketPolicy.getClientId());
-        System.out.println("Algorithm:         " + tokenBucketPolicy.getAlgorithmType());
-        System.out.println("Bucket Capacity:   " + tokenBucketPolicy.getLimit() + " tokens");
-        System.out.println("Refill Rate:       " + tokenBucketPolicy.getRefillTokens()
-                + " tokens / " + tokenBucketPolicy.getRefillDurationMillis() + " ms");
-        System.out.println("Status:            " + (tokenBucketPolicy.isEnabled() ? "ENABLED" : "DISABLED"));
-        System.out.println("ToString:          " + tokenBucketPolicy);
-        System.out.println();
+        private static final int WIDTH = 76;
 
-        // 2. Demonstrate Sliding Window Policy (Akshit's algorithm configuration)
-        System.out.println("--- 2. Sliding Window Policy Configuration (Akshit) ---");
-        RateLimitPolicy slidingWindowPolicy = RateLimitPolicy.createSlidingWindowPolicy(
-                "policy-sw-standard",
-                "client-mobile-app",
-                60,       // Max requests
-                60000L    // Window duration: 60,000 ms (1 minute)
-        );
-        System.out.println("Policy ID:         " + slidingWindowPolicy.getPolicyId());
-        System.out.println("Client ID:         " + slidingWindowPolicy.getClientId());
-        System.out.println("Algorithm:         " + slidingWindowPolicy.getAlgorithmType());
-        System.out.println("Max Requests:      " + slidingWindowPolicy.getLimit() + " requests");
-        System.out.println("Window Duration:   " + slidingWindowPolicy.getWindowDurationMillis() + " ms");
-        System.out.println("Status:            " + (slidingWindowPolicy.isEnabled() ? "ENABLED" : "DISABLED"));
-        System.out.println("ToString:          " + slidingWindowPolicy);
-        System.out.println();
+        public static void main(String[] args) {
 
-        // 3. Demonstrate RateLimitResult - Allowed Request
-        System.out.println("--- 3. RateLimitResult: Allowed Request ---");
-        RateLimitResult allowedResult = RateLimitResult.allow(99.0, "Request permitted under Token Bucket policy");
-        System.out.println("Allowed:            " + allowedResult.isAllowed());
-        System.out.println("Remaining Capacity: " + allowedResult.getRemainingCapacity());
-        System.out.println("Retry After:        " + allowedResult.getRetryAfterMillis());
-        System.out.println("Message:            " + allowedResult.getMessage());
-        System.out.println("ToString:           " + allowedResult);
-        System.out.println();
+                long startTime = 1000L;
 
-        // 4. Demonstrate RateLimitResult - Rejected Request (429 Rate Exceeded)
-        System.out.println("--- 4. RateLimitResult: Rejected Request ---");
-        RateLimitResult rejectedResult = RateLimitResult.reject(0.0, 500L, "Rate limit exceeded. Bucket is empty.");
-        System.out.println("Allowed:            " + rejectedResult.isAllowed());
-        System.out.println("Remaining Capacity: " + rejectedResult.getRemainingCapacity());
-        System.out.println("Retry After (ms):   " + rejectedResult.getRetryAfterMillis() + " ms");
-        System.out.println("Message:            " + rejectedResult.getMessage());
-        System.out.println("ToString:           " + rejectedResult);
-        System.out.println();
+                printHeader();
 
-        System.out.println("==========================================================");
-        System.out.println("  Core Foundation Verified: All contracts & models ready! ");
-        System.out.println("==========================================================");
-    }
+                // Token Bucket Demonstration
+                TokenBucketRateLimiter tokenBucketLimiter = new TokenBucketRateLimiter();
+
+                RateLimitPolicy tbPolicy = RateLimitPolicy.createTokenBucketPolicy(
+                                "policy-tb-standard",
+                                "client-analytics",
+                                3,
+                                1,
+                                1000L);
+
+                printSection("TOKEN BUCKET", "Prachi");
+                printConfiguration("Capacity", "3 tokens");
+                printConfiguration("Refill Rate", "1 token / 1000 ms");
+
+                printTableHeader();
+
+                for (int i = 1; i <= 4; i++) {
+
+                        RateLimitResult result = tokenBucketLimiter.allowRequest(tbPolicy, startTime);
+
+                        printRequest(i, "0 ms", result);
+                }
+
+                printEvent("Time advanced by 1000 ms");
+
+                RateLimitResult tbResult = tokenBucketLimiter.allowRequest(
+                                tbPolicy,
+                                startTime + 1000L);
+
+                printRequest(5, "1000 ms", tbResult);
+
+                printDivider();
+
+                // Sliding Window Demonstration
+                SlidingWindow slidingWindowLimiter = new SlidingWindow();
+
+                RateLimitPolicy swPolicy = RateLimitPolicy.createSlidingWindowPolicy(
+                                "policy-sw-standard",
+                                "client-mobile",
+                                2,
+                                5000L);
+
+                printSection("SLIDING WINDOW", "Akshit");
+                printConfiguration("Request Limit", "2 requests");
+                printConfiguration("Window Duration", "5000 ms");
+
+                printTableHeader();
+
+                for (int i = 1; i <= 3; i++) {
+
+                        RateLimitResult result = slidingWindowLimiter.allowRequest(swPolicy, startTime);
+
+                        printRequest(i, "0 ms", result);
+                }
+
+                printEvent("Time advanced by 5000 ms");
+
+                RateLimitResult swResult = slidingWindowLimiter.allowRequest(
+                                swPolicy,
+                                startTime + 5000L);
+
+                printRequest(4, "5000 ms", swResult);
+
+                printFooter();
+        }
+
+        private static void printHeader() {
+
+                System.out.println();
+                System.out.println(CYAN + BOLD + "  THROTTLIX" + RESET
+                                + DIM + "  /  API TRAFFIC MANAGEMENT" + RESET);
+
+                System.out.println(DIM + "  Live Rate Limiting Demonstration" + RESET);
+
+                printDivider();
+
+        }
+
+        private static void printSection(String algorithm, String owner) {
+
+                System.out.println();
+                System.out.println(BOLD + CYAN + "  " + algorithm + RESET
+                                + DIM + "  |  " + owner + RESET);
+
+                printDivider();
+        }
+
+        private static void printConfiguration(String label, String value) {
+
+                System.out.printf("  %-20s : %s%n", label, value);
+        }
+
+        private static void printTableHeader() {
+
+                printDivider();
+
+                System.out.printf(
+                                BOLD + "  %-12s %-12s %-14s %-12s %-12s%n" + RESET,
+                                "REQUEST",
+                                "TIME",
+                                "STATUS",
+                                "REMAINING",
+                                "RETRY");
+
+                printDivider();
+        }
+
+        private static void printRequest(
+                        int requestNumber,
+                        String time,
+                        RateLimitResult result) {
+
+                String status = result.isAllowed()
+                                ? GREEN + "ALLOWED" + RESET
+                                : RED + "REJECTED" + RESET;
+
+                String retry = result.getRetryAfterMillis() == null
+                                ? "-"
+                                : result.getRetryAfterMillis() + " ms";
+
+                String remaining = (result.getRemainingCapacity() == (long) result.getRemainingCapacity())
+                                ? String.valueOf((long) result.getRemainingCapacity())
+                                : String.format("%.1f", result.getRemainingCapacity());
+
+                System.out.printf(
+                                "  %-12s %-12s %-23s %-12s %-12s%n",
+                                "#" + requestNumber,
+                                time,
+                                status,
+                                remaining,
+                                retry);
+        }
+
+        private static void printEvent(String message) {
+
+                System.out.println();
+                System.out.println(YELLOW + "  > " + message + RESET);
+                System.out.println();
+        }
+
+        private static void printDivider() {
+
+                System.out.println(DIM + "  " + "-".repeat(WIDTH - 2) + RESET);
+        }
+
+        private static void printFooter() {
+
+                printDivider();
+
+                System.out.println(
+                                GREEN + BOLD + "  DEMONSTRATION COMPLETED" + RESET);
+
+                System.out.println(
+                                DIM + "  Token Bucket and Sliding Window executed successfully."
+                                                + RESET);
+
+                printDivider();
+                System.out.println();
+        }
 }
