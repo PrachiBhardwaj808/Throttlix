@@ -39,6 +39,27 @@ public class RateLimitServlet extends HttpServlet {
         processRequest(request, response);
     }
 
+    @Override
+    protected void doPut(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
+        sendMethodNotAllowed(response);
+    }
+
+    @Override
+    protected void doDelete(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
+        sendMethodNotAllowed(response);
+    }
+
+    private void sendMethodNotAllowed(HttpServletResponse response) throws IOException {
+        response.setContentType("application/json");
+        response.setCharacterEncoding("UTF-8");
+        response.setStatus(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
+        response.setHeader("Allow", "GET, POST");
+        response.getWriter().write("""
+                {"status":"METHOD_NOT_ALLOWED","message":"HTTP method not allowed on this endpoint"}""");
+    }
+
     private void processRequest(HttpServletRequest request, HttpServletResponse response)
             throws IOException {
         response.setContentType("application/json");
@@ -101,7 +122,20 @@ public class RateLimitServlet extends HttpServlet {
 
             long currentTimeMillis = System.currentTimeMillis();
             RateLimitPolicy policy = rateLimiterService.getPolicy(clientId);
+            if (policy == null) {
+                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                response.getWriter().write("""
+                        {"status":"BAD_REQUEST","message":"Invalid or missing rate limit policy"}""");
+                return;
+            }
+
             RateLimitResult result = rateLimiterService.evaluate(clientId, currentTimeMillis);
+            if (result == null) {
+                response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+                response.getWriter().write("""
+                        {"status":"ERROR","message":"Rate limit evaluation failed"}""");
+                return;
+            }
 
             response.setHeader("X-RateLimit-Limit", String.valueOf(policy.getLimit()));
             long remaining = (long) Math.max(0, Math.floor(result.getRemainingCapacity()));
