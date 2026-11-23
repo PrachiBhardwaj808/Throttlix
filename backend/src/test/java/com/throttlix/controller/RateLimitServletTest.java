@@ -14,7 +14,7 @@ import org.mockito.MockitoAnnotations;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -61,11 +61,26 @@ class RateLimitServletTest {
     }
 
     @Test
-    void shouldReturn401WhenApiKeyIsInvalid() throws Exception {
+    void shouldReturn401WhenApiKeyHeaderIsEmptyOrWhitespace() throws Exception {
         when(request.getMethod()).thenReturn("GET");
         when(request.getRequestURI()).thenReturn("/api/limit");
-        when(request.getHeader("X-API-Key")).thenReturn("invalid-key-xyz");
-        when(authService.authenticate("invalid-key-xyz")).thenReturn(null);
+        when(request.getHeader("X-API-Key")).thenReturn("   ");
+
+        servlet.doGet(request, response);
+
+        verify(response).setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        String output = responseBodyWriter.toString();
+        assertTrue(output.contains("UNAUTHORIZED"));
+        assertTrue(output.contains("Missing X-API-Key header"));
+    }
+
+    @Test
+    void shouldReturn401WhenApiKeyIsInvalid() throws Exception {
+        String invalidKey = "invalid-secret-key-xyz";
+        when(request.getMethod()).thenReturn("GET");
+        when(request.getRequestURI()).thenReturn("/api/limit");
+        when(request.getHeader("X-API-Key")).thenReturn(invalidKey);
+        when(authService.authenticate(invalidKey)).thenReturn(null);
 
         servlet.doGet(request, response);
 
@@ -73,14 +88,16 @@ class RateLimitServletTest {
         String output = responseBodyWriter.toString();
         assertTrue(output.contains("UNAUTHORIZED"));
         assertTrue(output.contains("Invalid API key"));
+        assertFalse(output.contains(invalidKey));
     }
 
     @Test
     void shouldReturn200AndAllowedHeadersWhenLimitPermitsRequest() throws Exception {
+        String rawKey = "thx-test-key-1";
         when(request.getMethod()).thenReturn("GET");
         when(request.getRequestURI()).thenReturn("/api/limit");
-        when(request.getHeader("X-API-Key")).thenReturn("thx-test-key-1");
-        when(authService.authenticate("thx-test-key-1")).thenReturn("client-analytics");
+        when(request.getHeader("X-API-Key")).thenReturn(rawKey);
+        when(authService.authenticate(rawKey)).thenReturn("client-analytics");
 
         RateLimitPolicy policy = RateLimitPolicy.createTokenBucketPolicy(
                 "pol-analytics", "client-analytics", 10, 5, 1000
@@ -99,14 +116,16 @@ class RateLimitServletTest {
         assertTrue(output.contains("ALLOWED"));
         assertTrue(output.contains("client-analytics"));
         assertTrue(output.contains("TOKEN_BUCKET"));
+        assertFalse(output.contains(rawKey));
     }
 
     @Test
     void shouldReturn429AndRetryAfterWhenLimitIsExceeded() throws Exception {
+        String rawKey = "thx-test-key-1";
         when(request.getMethod()).thenReturn("POST");
         when(request.getRequestURI()).thenReturn("/api/limit");
-        when(request.getHeader("X-API-Key")).thenReturn("thx-test-key-1");
-        when(authService.authenticate("thx-test-key-1")).thenReturn("client-analytics");
+        when(request.getHeader("X-API-Key")).thenReturn(rawKey);
+        when(authService.authenticate(rawKey)).thenReturn("client-analytics");
 
         RateLimitPolicy policy = RateLimitPolicy.createTokenBucketPolicy(
                 "pol-analytics", "client-analytics", 10, 5, 1000
@@ -126,6 +145,7 @@ class RateLimitServletTest {
         assertTrue(output.contains("REJECTED"));
         assertTrue(output.contains("1500"));
         assertTrue(output.contains("client-analytics"));
+        assertFalse(output.contains(rawKey));
     }
 
     @Test
@@ -139,6 +159,27 @@ class RateLimitServletTest {
         verify(response).setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         String output = responseBodyWriter.toString();
         assertTrue(output.contains("ERROR"));
-        assertTrue(!output.contains("Database timeout simulation"));
+        assertFalse(output.contains("Database timeout simulation"));
+    }
+
+    @Test
+    void shouldExecuteFullRealPipelineForValidMobileKeyWithSlidingWindow() throws Exception {
+        ApiKeyAuthService realAuthService = new ApiKeyAuthService();
+        RateLimiterService realRateLimiterService = new RateLimiterService();
+        RateLimitServlet realServlet = new RateLimitServlet(realAuthService, realRateLimiterService);
+
+        when(request.getMethod()).thenReturn("GET");
+        when(request.getRequestURI()).thenReturn("/api/limit");
+        when(request.getHeader("X-API-Key")).thenReturn("thx-test-key-2");
+
+        realServlet.doGet(request, response);
+
+        verify(response).setStatus(HttpServletResponse.SC_OK);
+        verify(response).setHeader("X-RateLimit-Limit", "5");
+        String output = responseBodyWriter.toString();
+        assertTrue(output.contains("ALLOWED"));
+        assertTrue(output.contains("client-mobile"));
+        assertTrue(output.contains("SLIDING_WINDOW"));
+        assertFalse(output.contains("thx-test-key-2"));
     }
 }
