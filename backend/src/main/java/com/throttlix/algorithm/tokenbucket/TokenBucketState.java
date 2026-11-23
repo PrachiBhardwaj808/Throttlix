@@ -1,6 +1,6 @@
 package com.throttlix.algorithm.tokenbucket;
 
-public class TokenBucket {
+public class TokenBucketState {
 
     private final int capacity;
     private final int refillTokens;
@@ -8,7 +8,7 @@ public class TokenBucket {
     private double availableTokens;
     private long lastRefillTimeMillis;
 
-    public TokenBucket(int capacity, int refillTokens, long refillDurationMillis, long initialTimeMillis) {
+    public TokenBucketState(int capacity, int refillTokens, long refillDurationMillis, long initialTimeMillis) {
         this.capacity = capacity;
         this.refillTokens = refillTokens;
         this.refillDurationMillis = refillDurationMillis;
@@ -41,6 +41,10 @@ public class TokenBucket {
         return false;
     }
 
+    public synchronized double getAvailableTokens() {
+        return availableTokens;
+    }
+
     public synchronized double getAvailableTokens(long currentTimeMillis) {
         refill(currentTimeMillis);
         return availableTokens;
@@ -69,5 +73,9 @@ public class TokenBucket {
 
     public long getRefillDurationMillis() {
         return refillDurationMillis;
+    }
+
+    public long getLastRefillTimeMillis() {
+        return lastRefillTimeMillis;
     }
 }

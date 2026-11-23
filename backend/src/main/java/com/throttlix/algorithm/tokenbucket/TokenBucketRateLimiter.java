@@ -9,7 +9,7 @@ import java.util.concurrent.ConcurrentMap;
 
 public class TokenBucketRateLimiter implements RateLimiter {
 
-    private final ConcurrentMap<String, TokenBucket> clientBuckets = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, TokenBucketState> clientStates = new ConcurrentHashMap<>();
 
     @Override
     public RateLimitResult allowRequest(RateLimitPolicy policy, long currentTimeMillis) {
@@ -26,28 +26,28 @@ public class TokenBucketRateLimiter implements RateLimiter {
         }
 
         String clientId = policy.getClientId();
-        TokenBucket bucket = clientBuckets.get(clientId);
+        TokenBucketState state = clientStates.get(clientId);
 
-        if (bucket == null) {
-            TokenBucket newBucket = new TokenBucket(
+        if (state == null) {
+            TokenBucketState newState = new TokenBucketState(
                     policy.getLimit(),
                     policy.getRefillTokens(),
                     policy.getRefillDurationMillis(),
                     currentTimeMillis
             );
-            TokenBucket existing = clientBuckets.putIfAbsent(clientId, newBucket);
-            bucket = (existing != null) ? existing : newBucket;
+            TokenBucketState existing = clientStates.putIfAbsent(clientId, newState);
+            state = (existing != null) ? existing : newState;
         }
 
-        synchronized (bucket) {
-            boolean consumed = bucket.tryConsume(currentTimeMillis);
-            double remainingTokens = bucket.getAvailableTokens(currentTimeMillis);
+        synchronized (state) {
+            boolean consumed = state.tryConsume(currentTimeMillis);
+            double remainingTokens = state.getAvailableTokens();
 
             if (consumed) {
                 return RateLimitResult.allow(remainingTokens, "Request allowed by Token Bucket");
             }
 
-            long retryAfterMillis = bucket.calculateRetryAfterMillis(currentTimeMillis);
+            long retryAfterMillis = state.calculateRetryAfterMillis(currentTimeMillis);
             return RateLimitResult.reject(remainingTokens, retryAfterMillis, "Token Bucket rate limit exceeded");
         }
     }
