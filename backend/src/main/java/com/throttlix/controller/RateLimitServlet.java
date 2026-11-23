@@ -1,6 +1,7 @@
 package com.throttlix.controller;
 
 import com.throttlix.auth.ApiKeyAuthService;
+import com.throttlix.core.AlgorithmType;
 import com.throttlix.core.RateLimitPolicy;
 import com.throttlix.core.RateLimitResult;
 import com.throttlix.service.RateLimiterService;
@@ -44,8 +45,6 @@ public class RateLimitServlet extends HttpServlet {
         response.setCharacterEncoding("UTF-8");
 
         try {
-            String method = request.getMethod();
-            String path = request.getRequestURI();
             String apiKey = request.getHeader("X-API-Key");
 
             if (apiKey == null || apiKey.trim().isEmpty()) {
@@ -53,6 +52,43 @@ public class RateLimitServlet extends HttpServlet {
                 response.getWriter().write("""
                         {"status":"UNAUTHORIZED","message":"Missing X-API-Key header"}""");
                 return;
+            }
+
+            if (hasMalformedHeaderChars(apiKey)) {
+                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                response.getWriter().write("""
+                        {"status":"BAD_REQUEST","message":"Malformed X-API-Key header format"}""");
+                return;
+            }
+
+            String tokensParam = request.getParameter("tokens");
+            if (tokensParam != null) {
+                try {
+                    int requestedTokens = Integer.parseInt(tokensParam.trim());
+                    if (requestedTokens <= 0) {
+                        response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                        response.getWriter().write("""
+                                {"status":"BAD_REQUEST","message":"Invalid tokens parameter: must be a positive integer"}""");
+                        return;
+                    }
+                } catch (NumberFormatException e) {
+                    response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                    response.getWriter().write("""
+                            {"status":"BAD_REQUEST","message":"Malformed tokens parameter: must be an integer"}""");
+                    return;
+                }
+            }
+
+            String algoParam = request.getParameter("algorithm");
+            if (algoParam != null && !algoParam.trim().isEmpty()) {
+                try {
+                    AlgorithmType.valueOf(algoParam.trim().toUpperCase());
+                } catch (IllegalArgumentException e) {
+                    response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                    response.getWriter().write("""
+                            {"status":"BAD_REQUEST","message":"Malformed algorithm parameter: unsupported algorithm"}""");
+                    return;
+                }
             }
 
             String clientId = authService.authenticate(apiKey);
@@ -85,26 +121,47 @@ public class RateLimitServlet extends HttpServlet {
             } else {
                 response.setStatus(429);
                 Long retryAfterMillis = result.getRetryAfterMillis();
-                long retryAfterSeconds = (retryAfterMillis != null && retryAfterMillis > 0)
-                        ? (long) Math.ceil(retryAfterMillis / 1000.0)
-                        : 1;
+                long retryAfterSeconds = calculateRetryAfterSeconds(retryAfterMillis);
                 response.setHeader("Retry-After", String.valueOf(retryAfterSeconds));
-                long retryMs = (retryAfterMillis != null) ? retryAfterMillis : 0L;
+
+                long retryMs = (retryAfterMillis != null && retryAfterMillis > 0) ? retryAfterMillis : 0L;
                 String json = String.format(
-                        "{\"status\":\"REJECTED\",\"clientId\":\"%s\",\"algorithm\":\"%s\",\"limit\":%d,\"remainingCapacity\":0,\"retryAfterMs\":%d,\"retryAfterSeconds\":%d,\"message\":\"%s\"}",
+                        "{\"status\":\"REJECTED\",\"clientId\":\"%s\",\"algorithm\":\"%s\",\"limit\":%d,\"remainingCapacity\":%d,\"retryAfterMs\":%d,\"retryAfterSeconds\":%d,\"message\":\"%s\"}",
                         clientId,
                         policy.getAlgorithmType().name(),
                         policy.getLimit(),
+                        remaining,
                         retryMs,
                         retryAfterSeconds,
                         result.getMessage()
                 );
                 response.getWriter().write(json);
             }
+        } catch (IllegalArgumentException e) {
+            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            response.getWriter().write("""
+                    {"status":"BAD_REQUEST","message":"Malformed request syntax or invalid parameters"}""");
         } catch (Exception e) {
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
             response.getWriter().write("""
                     {"status":"ERROR","message":"An unexpected error occurred while processing the request"}""");
         }
+    }
+
+    private boolean hasMalformedHeaderChars(String value) {
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c < 32 || c == 127) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private long calculateRetryAfterSeconds(Long retryAfterMillis) {
+        if (retryAfterMillis == null || retryAfterMillis <= 0) {
+            return 1;
+        }
+        return (long) Math.ceil(retryAfterMillis / 1000.0);
     }
 }

@@ -92,7 +92,66 @@ class RateLimitServletTest {
     }
 
     @Test
-    void shouldReturn200AndAllowedHeadersWhenLimitPermitsRequest() throws Exception {
+    void shouldReturn400WhenApiKeyHeaderContainsMalformedControlCharacters() throws Exception {
+        when(request.getMethod()).thenReturn("GET");
+        when(request.getRequestURI()).thenReturn("/api/limit");
+        when(request.getHeader("X-API-Key")).thenReturn("key\nwith\rnewline");
+
+        servlet.doGet(request, response);
+
+        verify(response).setStatus(HttpServletResponse.SC_BAD_REQUEST);
+        String output = responseBodyWriter.toString();
+        assertTrue(output.contains("BAD_REQUEST"));
+        assertTrue(output.contains("Malformed X-API-Key header format"));
+    }
+
+    @Test
+    void shouldReturn400WhenTokensParameterIsNotAnInteger() throws Exception {
+        when(request.getMethod()).thenReturn("GET");
+        when(request.getRequestURI()).thenReturn("/api/limit");
+        when(request.getHeader("X-API-Key")).thenReturn("thx-test-key-1");
+        when(request.getParameter("tokens")).thenReturn("not-a-number");
+
+        servlet.doGet(request, response);
+
+        verify(response).setStatus(HttpServletResponse.SC_BAD_REQUEST);
+        String output = responseBodyWriter.toString();
+        assertTrue(output.contains("BAD_REQUEST"));
+        assertTrue(output.contains("Malformed tokens parameter"));
+    }
+
+    @Test
+    void shouldReturn400WhenTokensParameterIsZeroOrNegative() throws Exception {
+        when(request.getMethod()).thenReturn("GET");
+        when(request.getRequestURI()).thenReturn("/api/limit");
+        when(request.getHeader("X-API-Key")).thenReturn("thx-test-key-1");
+        when(request.getParameter("tokens")).thenReturn("-3");
+
+        servlet.doGet(request, response);
+
+        verify(response).setStatus(HttpServletResponse.SC_BAD_REQUEST);
+        String output = responseBodyWriter.toString();
+        assertTrue(output.contains("BAD_REQUEST"));
+        assertTrue(output.contains("must be a positive integer"));
+    }
+
+    @Test
+    void shouldReturn400WhenAlgorithmParameterIsUnsupported() throws Exception {
+        when(request.getMethod()).thenReturn("GET");
+        when(request.getRequestURI()).thenReturn("/api/limit");
+        when(request.getHeader("X-API-Key")).thenReturn("thx-test-key-1");
+        when(request.getParameter("algorithm")).thenReturn("LEAKY_BUCKET_UNSUPPORTED");
+
+        servlet.doGet(request, response);
+
+        verify(response).setStatus(HttpServletResponse.SC_BAD_REQUEST);
+        String output = responseBodyWriter.toString();
+        assertTrue(output.contains("BAD_REQUEST"));
+        assertTrue(output.contains("unsupported algorithm"));
+    }
+
+    @Test
+    void shouldReturn200AndAccurateHeadersWhenRequestIsAccepted() throws Exception {
         String rawKey = "thx-test-key-1";
         when(request.getMethod()).thenReturn("GET");
         when(request.getRequestURI()).thenReturn("/api/limit");
@@ -116,11 +175,13 @@ class RateLimitServletTest {
         assertTrue(output.contains("ALLOWED"));
         assertTrue(output.contains("client-analytics"));
         assertTrue(output.contains("TOKEN_BUCKET"));
+        assertTrue(output.contains("\"limit\":10"));
+        assertTrue(output.contains("\"remainingCapacity\":9"));
         assertFalse(output.contains(rawKey));
     }
 
     @Test
-    void shouldReturn429AndRetryAfterWhenLimitIsExceeded() throws Exception {
+    void shouldReturn429WithCeilingRoundedRetryAfterWhenRateLimited() throws Exception {
         String rawKey = "thx-test-key-1";
         when(request.getMethod()).thenReturn("POST");
         when(request.getRequestURI()).thenReturn("/api/limit");
@@ -132,7 +193,7 @@ class RateLimitServletTest {
         );
         when(rateLimiterService.getPolicy("client-analytics")).thenReturn(policy);
         when(rateLimiterService.evaluate(eq("client-analytics"), anyLong()))
-                .thenReturn(RateLimitResult.reject(0.0, 1500L, "Rate limit exceeded"));
+                .thenReturn(RateLimitResult.reject(0.0, 1400L, "Rate limit exceeded"));
 
         servlet.doPost(request, response);
 
@@ -143,23 +204,49 @@ class RateLimitServletTest {
 
         String output = responseBodyWriter.toString();
         assertTrue(output.contains("REJECTED"));
-        assertTrue(output.contains("1500"));
-        assertTrue(output.contains("client-analytics"));
+        assertTrue(output.contains("\"retryAfterMs\":1400"));
+        assertTrue(output.contains("\"retryAfterSeconds\":2"));
+        assertTrue(output.contains("\"remainingCapacity\":0"));
         assertFalse(output.contains(rawKey));
     }
 
     @Test
-    void shouldReturn500WhenUnexpectedExceptionOccurs() throws Exception {
+    void shouldNeverReturnNegativeRetryAfterWhenRateLimited() throws Exception {
+        String rawKey = "thx-test-key-1";
         when(request.getMethod()).thenReturn("GET");
         when(request.getRequestURI()).thenReturn("/api/limit");
-        when(request.getHeader("X-API-Key")).thenThrow(new RuntimeException("Database timeout simulation"));
+        when(request.getHeader("X-API-Key")).thenReturn(rawKey);
+        when(authService.authenticate(rawKey)).thenReturn("client-analytics");
+
+        RateLimitPolicy policy = RateLimitPolicy.createTokenBucketPolicy(
+                "pol-analytics", "client-analytics", 10, 5, 1000
+        );
+        when(rateLimiterService.getPolicy("client-analytics")).thenReturn(policy);
+        when(rateLimiterService.evaluate(eq("client-analytics"), anyLong()))
+                .thenReturn(RateLimitResult.reject(0.0, -100L, "Rate limit exceeded"));
+
+        servlet.doGet(request, response);
+
+        verify(response).setStatus(429);
+        verify(response).setHeader("Retry-After", "1");
+
+        String output = responseBodyWriter.toString();
+        assertTrue(output.contains("\"retryAfterMs\":0"));
+        assertTrue(output.contains("\"retryAfterSeconds\":1"));
+    }
+
+    @Test
+    void shouldReturn500WithoutLeakingExceptionDetailsWhenUnexpectedExceptionOccurs() throws Exception {
+        when(request.getMethod()).thenReturn("GET");
+        when(request.getRequestURI()).thenReturn("/api/limit");
+        when(request.getHeader("X-API-Key")).thenThrow(new RuntimeException("Sensitive database connection details"));
 
         servlet.doGet(request, response);
 
         verify(response).setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         String output = responseBodyWriter.toString();
         assertTrue(output.contains("ERROR"));
-        assertFalse(output.contains("Database timeout simulation"));
+        assertFalse(output.contains("Sensitive database connection details"));
     }
 
     @Test
