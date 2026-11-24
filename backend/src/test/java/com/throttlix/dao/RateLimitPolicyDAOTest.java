@@ -3,17 +3,17 @@ package com.throttlix.dao;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import com.throttlix.core.AlgorithmType;
 import com.throttlix.core.RateLimitPolicy;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.HashMap;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class RateLimitPolicyDAOTest {
@@ -22,9 +22,7 @@ class RateLimitPolicyDAOTest {
 
     @Test
     void mapsSlidingWindowPolicyAndConvertsSecondsToMillis() throws SQLException {
-        ResultSet resultSet = singlePolicyRow(AlgorithmType.SLIDING_WINDOW.name());
-        when(resultSet.getLong("window_seconds")).thenReturn(60L);
-        PolicyQuery query = queryReturning(resultSet);
+        PolicyQuery query = queryReturning(row(AlgorithmType.SLIDING_WINDOW.name(), 60L, null, null));
 
         RateLimitPolicy policy = policyDAO.findActivePolicy(query.connection(), "client-a").orElseThrow();
 
@@ -33,15 +31,12 @@ class RateLimitPolicyDAOTest {
         assertEquals(AlgorithmType.SLIDING_WINDOW, policy.getAlgorithmType());
         assertEquals(100, policy.getLimit());
         assertEquals(60_000L, policy.getWindowDurationMillis());
-        verify(query.statement()).setString(1, "client-a");
+        assertEquals("client-a", query.statement().clientId);
     }
 
     @Test
     void mapsTokenBucketRefillSettings() throws SQLException {
-        ResultSet resultSet = singlePolicyRow(AlgorithmType.TOKEN_BUCKET.name());
-        when(resultSet.getInt("refill_tokens")).thenReturn(5);
-        when(resultSet.getLong("refill_duration_millis")).thenReturn(2_000L);
-        PolicyQuery query = queryReturning(resultSet);
+        PolicyQuery query = queryReturning(row(AlgorithmType.TOKEN_BUCKET.name(), 1L, 5, 2_000L));
 
         RateLimitPolicy policy = policyDAO.findActivePolicy(query.connection(), "client-a").orElseThrow();
 
@@ -53,9 +48,7 @@ class RateLimitPolicyDAOTest {
 
     @Test
     void returnsEmptyWhenClientHasNoActivePolicy() throws SQLException {
-        ResultSet resultSet = mock(ResultSet.class);
-        when(resultSet.next()).thenReturn(false);
-        PolicyQuery query = queryReturning(resultSet);
+        PolicyQuery query = queryReturning(null);
 
         assertTrue(policyDAO.findActivePolicy(query.connection(), "client-a").isEmpty());
     }
@@ -65,13 +58,12 @@ class RateLimitPolicyDAOTest {
         assertThrows(IllegalArgumentException.class,
                 () -> policyDAO.findActivePolicy(null, "client-a"));
         assertThrows(IllegalArgumentException.class,
-                () -> policyDAO.findActivePolicy(mock(Connection.class), " "));
+                () -> policyDAO.findActivePolicy(queryReturning(null).connection(), " "));
     }
 
     @Test
     void rejectsUnsupportedAlgorithmFromDatabase() throws SQLException {
-        ResultSet resultSet = singlePolicyRow("UNKNOWN");
-        PolicyQuery query = queryReturning(resultSet);
+        PolicyQuery query = queryReturning(row("UNKNOWN", 60L, null, null));
 
         assertThrows(SQLException.class,
                 () -> policyDAO.findActivePolicy(query.connection(), "client-a"));
@@ -79,33 +71,91 @@ class RateLimitPolicyDAOTest {
 
     @Test
     void rejectsTokenBucketPolicyMissingRefillConfiguration() throws SQLException {
-        ResultSet resultSet = singlePolicyRow(AlgorithmType.TOKEN_BUCKET.name());
-        when(resultSet.getInt("refill_tokens")).thenReturn(0);
-        when(resultSet.wasNull()).thenReturn(true);
-        PolicyQuery query = queryReturning(resultSet);
+        PolicyQuery query = queryReturning(row(AlgorithmType.TOKEN_BUCKET.name(), 1L, null, null));
 
         assertThrows(SQLException.class,
                 () -> policyDAO.findActivePolicy(query.connection(), "client-a"));
     }
 
-    private ResultSet singlePolicyRow(String algorithm) throws SQLException {
-        ResultSet resultSet = mock(ResultSet.class);
-        when(resultSet.next()).thenReturn(true);
-        when(resultSet.getLong("policy_id")).thenReturn(7L);
-        when(resultSet.getString("client_name")).thenReturn("client-a");
-        when(resultSet.getString("algorithm")).thenReturn(algorithm);
-        when(resultSet.getInt("request_limit")).thenReturn(100);
-        when(resultSet.getBoolean("enabled")).thenReturn(true);
-        return resultSet;
+    private Map<String, Object> row(String algorithm, long windowSeconds,
+                                    Integer refillTokens, Long refillDurationMillis) {
+        Map<String, Object> values = new HashMap<>();
+        values.put("policy_id", 7L);
+        values.put("client_name", "client-a");
+        values.put("algorithm", algorithm);
+        values.put("request_limit", 100);
+        values.put("window_seconds", windowSeconds);
+        values.put("refill_tokens", refillTokens);
+        values.put("refill_duration_millis", refillDurationMillis);
+        values.put("enabled", true);
+        return values;
     }
 
-    private PolicyQuery queryReturning(ResultSet resultSet) throws SQLException {
-        Connection connection = mock(Connection.class);
-        PreparedStatement statement = mock(PreparedStatement.class);
-        when(connection.prepareStatement(anyString())).thenReturn(statement);
-        when(statement.executeQuery()).thenReturn(resultSet);
-        return new PolicyQuery(connection, statement);
+    private PolicyQuery queryReturning(Map<String, Object> row) {
+        QueryState state = new QueryState(row);
+        ResultSet resultSet = proxy(ResultSet.class, (proxy, method, args) -> {
+            return switch (method.getName()) {
+                case "next" -> {
+                    boolean hasRow = state.row != null && !state.read;
+                    state.read = true;
+                    yield hasRow;
+                }
+                case "getLong", "getInt", "getString", "getBoolean" -> {
+                    Object value = state.row == null ? null : state.row.get(args[0]);
+                    state.wasNull = value == null;
+                    yield value == null ? defaultValue(method.getReturnType()) : value;
+                }
+                case "wasNull" -> state.wasNull;
+                case "close" -> null;
+                default -> defaultValue(method.getReturnType());
+            };
+        });
+        PreparedStatement statement = proxy(PreparedStatement.class, (proxy, method, args) -> {
+            return switch (method.getName()) {
+                case "setString" -> {
+                    state.clientId = (String) args[1];
+                    yield null;
+                }
+                case "executeQuery" -> {
+                    yield resultSet;
+                }
+                case "close" -> null;
+                default -> defaultValue(method.getReturnType());
+            };
+        });
+        Connection connection = proxy(Connection.class, (proxy, method, args) -> {
+            if (method.getName().equals("prepareStatement")) {
+                state.sql = (String) args[0];
+                return statement;
+            }
+            return defaultValue(method.getReturnType());
+        });
+        return new PolicyQuery(connection, state);
     }
 
-    private record PolicyQuery(Connection connection, PreparedStatement statement) { }
+    @SuppressWarnings("unchecked")
+    private <T> T proxy(Class<T> type, InvocationHandler handler) {
+        return (T) Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[] {type}, handler);
+    }
+
+    private Object defaultValue(Class<?> type) {
+        if (type == boolean.class) return false;
+        if (type == int.class) return 0;
+        if (type == long.class) return 0L;
+        return null;
+    }
+
+    private static class QueryState {
+        private final Map<String, Object> row;
+        private boolean read;
+        private boolean wasNull;
+        private String clientId;
+        private String sql;
+
+        private QueryState(Map<String, Object> row) {
+            this.row = row;
+        }
+    }
+
+    private record PolicyQuery(Connection connection, QueryState statement) { }
 }
