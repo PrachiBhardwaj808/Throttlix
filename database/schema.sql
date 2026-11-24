@@ -29,9 +29,17 @@ CREATE TABLE IF NOT EXISTS rate_limit_policies (
     algorithm VARCHAR(30) NOT NULL CHECK (algorithm IN ('TOKEN_BUCKET', 'SLIDING_WINDOW')),
     request_limit INTEGER NOT NULL CHECK (request_limit > 0),
     window_seconds INTEGER NOT NULL CHECK (window_seconds > 0),
+    refill_tokens INTEGER,
+    refill_duration_millis BIGINT,
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE rate_limit_policies
+    ADD COLUMN IF NOT EXISTS refill_tokens INTEGER;
+
+ALTER TABLE rate_limit_policies
+    ADD COLUMN IF NOT EXISTS refill_duration_millis BIGINT;
 
 -- 4. Client Policies Junction Table
 CREATE TABLE IF NOT EXISTS client_policies (
