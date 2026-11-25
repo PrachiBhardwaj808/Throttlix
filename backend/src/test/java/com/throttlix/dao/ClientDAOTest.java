@@ -33,8 +33,7 @@ class ClientDAOTest {
         when(generatedKeys.next()).thenReturn(true);
         when(generatedKeys.getLong(1)).thenReturn(101L);
 
-        long clientId = clientDAO.createClient(connection, "client-enterprise");
-        assertEquals(101L, clientId);
+        assertEquals(101L, clientDAO.createClient(connection, "client-enterprise"));
     }
 
     @Test

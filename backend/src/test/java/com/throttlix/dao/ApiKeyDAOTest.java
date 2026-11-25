@@ -34,8 +34,7 @@ class ApiKeyDAOTest {
         when(generatedKeys.next()).thenReturn(true);
         when(generatedKeys.getLong(1)).thenReturn(42L);
 
-        long keyId = apiKeyDAO.createApiKey(connection, 1L, "mobile-primary", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
-        assertEquals(42L, keyId);
+        assertEquals(42L, apiKeyDAO.createApiKey(connection, 1L, "mobile-primary", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"));
     }
 
     @Test
