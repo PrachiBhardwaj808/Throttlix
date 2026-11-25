@@ -14,11 +14,11 @@ This document breaks down the **Throttlix** platform into modular, decoupled sub
 - **Responsibilities:**
   - Generate cryptographically secure keys (`SecureRandom`).
   - Compute SHA-256 digests of API keys for database persistence.
-  - Validate the `X-API-Key` header on ingress requests against active keys in PostgreSQL.
+  - Validate the `X-API-Key` header on ingress requests against active keys in MySQL.
   - Revoke and rotate existing keys upon administrative command.
 - **Inputs:** Client ID, Key metadata, Raw API key header string.
 - **Outputs:** Plaintext key (once at creation), Authenticated `ClientContext` object, or `AuthenticationException`.
-- **Dependencies:** `com.throttlix.dao.ApiKeyDAO`, PostgreSQL.
+- **Dependencies:** `com.throttlix.dao.ApiKeyDAO`, MySQL.
 - **Related Database Entities:** `clients`, `api_keys`.
 - **APIs Involved:** `POST /api/v1/clients/{id}/keys`, `PATCH /api/v1/keys/{id}/deactivate`.
 - **Assigned Developer:** `[TO BE CONFIRMED]`
@@ -34,12 +34,12 @@ This document breaks down the **Throttlix** platform into modular, decoupled sub
 - **Module Name:** Policy Configuration & Lookup Subsystem
 - **Purpose:** Stores, validates, and manages rate-limiting policy rules and their bindings to client accounts.
 - **Responsibilities:**
-  - Create and update rate-limiting policies in PostgreSQL.
+  - Create and update rate-limiting policies in MySQL.
   - Link/unlink policies to specific clients via `client_policies`.
   - Cache policy definitions in memory to eliminate repeated SQL queries per request.
 - **Inputs:** Policy Name, Algorithm Type, Request Limit, Window Seconds / Refill Rate, Client ID.
 - **Outputs:** `RateLimitPolicy` domain model instance.
-- **Dependencies:** `com.throttlix.dao.PolicyDAO`, PostgreSQL.
+- **Dependencies:** `com.throttlix.dao.RateLimitPolicyDAO`, MySQL.
 - **Related Database Entities:** `rate_limit_policies`, `client_policies`.
 - **APIs Involved:** `POST /api/v1/policies`, `GET /api/v1/policies/{id}`.
 - **Assigned Developer:** `[TO BE CONFIRMED]`
@@ -103,8 +103,8 @@ This document breaks down the **Throttlix** platform into modular, decoupled sub
   - Write records to `request_logs` via JDBC batching or asynchronous worker queue.
   - Strictly filter out raw API keys, authorization tokens, and request/response bodies.
 - **Inputs:** `RequestLogRecord` model.
-- **Outputs:** Persisted database records in PostgreSQL.
-- **Dependencies:** `com.throttlix.dao.RequestLogDAO`, PostgreSQL.
+- **Outputs:** Persisted database records in MySQL.
+- **Dependencies:** `com.throttlix.dao.RequestLogDAO`, MySQL.
 - **Related Database Entities:** `request_logs`.
 - **APIs Involved:** None directly; invoked internally by `MOD-04`.
 - **Assigned Developer:** `[TO BE CONFIRMED]`
@@ -124,12 +124,12 @@ This document breaks down the **Throttlix** platform into modular, decoupled sub
   - Serve structured JSON payloads for frontend consumption.
 - **Inputs:** Time range parameters, Client filter, Endpoint filter.
 - **Outputs:** JSON analytics summary (`AnalyticsSummaryDTO`).
-- **Dependencies:** `com.throttlix.dao.RequestLogDAO`, PostgreSQL.
+- **Dependencies:** `com.throttlix.dao.RequestLogDAO`, MySQL.
 - **Related Database Entities:** `request_logs`, `clients`.
 - **APIs Involved:** `GET /api/v1/analytics/summary`, `GET /api/v1/analytics/clients`.
 - **Assigned Developer:** `[TO BE CONFIRMED]`
 - **Acceptance Criteria:**
-  - Sub-second query execution using PostgreSQL indexes on `(client_id, requested_at)`.
+  - Sub-second query execution using MySQL indexes on `(client_id, requested_at)`.
   - Accurately mirrors database records.
 
 ---

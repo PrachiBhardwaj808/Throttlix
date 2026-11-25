@@ -13,7 +13,7 @@ sequenceDiagram
     participant C as External Client / App
     participant S as Servlet / Filter Pipeline
     participant A as AuthService
-    participant D as PostgreSQL
+    participant D as MySQL
     participant R as RateLimitEngine
     participant B as Protected Backend API
 
@@ -63,7 +63,7 @@ sequenceDiagram
     participant User as System Operator
     participant UI as React Dashboard
     participant API as Analytics Servlet
-    participant DB as PostgreSQL Database
+    participant DB as MySQL Database
 
     User->>UI: Opens Dashboard
     UI->>API: GET /api/v1/analytics/summary

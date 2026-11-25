@@ -38,7 +38,7 @@ All contributors and maintainers are expected to collaborate professionally, res
    - React 19 + TypeScript with Tailwind CSS and Vite.
    - Ensure zero TypeScript compiler errors (`npm run build`).
 3. **Database Standards:**
-   - PostgreSQL 15+.
+   - MySQL 8.x (InnoDB, utf8mb4).
    - All SQL queries must use `PreparedStatement` to prevent SQL injection.
    - Never log raw API key secrets; store and compare secure hashes only.
 

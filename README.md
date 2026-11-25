@@ -2,7 +2,7 @@
 
 [![Java Version](https://img.shields.io/badge/Java-21%20LTS-orange.svg)](https://www.oracle.com/java/)
 [![Servlet API](https://img.shields.io/badge/Jakarta%20Servlet-6.0-blue.svg)](https://jakarta.ee/)
-[![Database](https://img.shields.io/badge/PostgreSQL-15%2B-blue.svg)](https://www.postgresql.org/)
+[![Database](https://img.shields.io/badge/MySQL-8.x-blue.svg)](https://www.mysql.com/)
 [![Container](https://img.shields.io/badge/Apache%20Tomcat-10.1%2B-yellow.svg)](https://tomcat.apache.org/)
 [![Frontend](https://img.shields.io/badge/React-19%20%7C%20TypeScript-cyan.svg)](https://react.dev/)
 [![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)]()
@@ -32,7 +32,7 @@ When APIs experience sudden traffic bursts—such as flash sales, automated scra
   - **Sliding Window Algorithm:** Tracks rolling request timestamps to eliminate fixed-window boundary burst exploits.
 - **Configurable Dynamic Policies:** Associate custom request limits, time windows, and algorithm selections with specific clients.
 - **Deterministic HTTP 429 & Telemetry Headers:** Returns RFC-compliant rate headers (`X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, `Retry-After`).
-- **PostgreSQL Telemetry Logging:** Records every request outcome (status, route, latency, allowed flag) via raw JDBC without exposing raw secrets.
+- **MySQL Telemetry Logging:** Records every request outcome (status, route, latency, allowed flag) via raw JDBC without exposing raw secrets.
 - **Interactive React Dashboard:** Real-time visualization of traffic volume, allowed vs. rejected distributions, active keys, and latency graphs.
 
 ---
@@ -45,7 +45,7 @@ When APIs experience sudden traffic bursts—such as flash sales, automated scra
 | **Web Layer** | Jakarta Servlet API 6.0 | RESTful request/response handling and filter interception. |
 | **Servlet Container** | Apache Tomcat 10.1+ | Jakarta EE 10 compliant servlet execution runtime. |
 | **Build Tool** | Apache Maven 3.9+ | Standard dependency management and WAR packaging. |
-| **Database** | PostgreSQL 15+ & JDBC | Durable persistence of clients, keys, policies, and audit logs. |
+| **Database** | MySQL 8.x & JDBC | Durable persistence of clients, keys, policies, and audit logs. |
 | **JSON Processing** | Jackson | High-throughput JSON serialization/deserialization. |
 | **Testing** | JUnit 5 & Mockito | Unit, concurrency, and isolated service testing. |
 | **Frontend UI** | React 19, TypeScript, Vite | Modern, typed Single Page Application (SPA) dashboard. |
@@ -74,7 +74,7 @@ flowchart LR
     Log --> Repo
     DashboardAPI --> Repo
     
-    Repo --> DB[(PostgreSQL 15+)]
+    Repo --> DB[(MySQL 8.x)]
     
     Gateway -->|Allowed Request| ProtectedBackend[Protected Backend APIs]
     Gateway -->|Rejected (HTTP 429)| Client
@@ -88,7 +88,7 @@ Ensure the following tools are installed:
 - **JDK 21 LTS** (`JAVA_HOME` configured)
 - **Apache Maven 3.9+**
 - **Apache Tomcat 10.1+** (`CATALINA_HOME` configured)
-- **PostgreSQL 15+** (running on port `5432`)
+- **MySQL 8.x** (running on port `3306`)
 - **Node.js 20+** and **npm 10+**
 
 Detailed setup instructions: [docs/06-deployment/ENVIRONMENT_SETUP.md](docs/06-deployment/ENVIRONMENT_SETUP.md)
@@ -99,11 +99,8 @@ Detailed setup instructions: [docs/06-deployment/ENVIRONMENT_SETUP.md](docs/06-d
 
 ### 6.1 Database Initialization
 ```bash
-# Connect to PostgreSQL and create database
-createdb throttlix_db
-
-# Execute schema migration script
-psql -d throttlix_db -f database/schema.sql
+# Connect to MySQL and execute schema script
+mysql -u root -p < database/mysql-schema.sql
 ```
 
 ### 6.2 Backend Build & Deployment
@@ -156,8 +153,9 @@ Throttlix/
 │   ├── src/main/webapp/WEB-INF/    # web.xml deployment descriptor
 │   └── pom.xml                     # Maven WAR configuration
 ├── frontend/                       # React 19 + TypeScript Vite dashboard
-├── database/                       # PostgreSQL schema migrations
-│   └── schema.sql
+├── database/                       # Database schemas (MySQL 8.x active & PostgreSQL history)
+│   ├── mysql-schema.sql            # Active MySQL 8.x schema
+│   └── schema.sql                  # Historical PostgreSQL migration
 ├── docs/                           # Comprehensive Engineering Documentation
 │   ├── 01-project-discovery/       # Overview, problem statement, objectives, scope
 │   ├── 02-requirements/            # SRS, functional, non-functional, roles, use cases

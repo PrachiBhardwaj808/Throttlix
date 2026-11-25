@@ -10,7 +10,7 @@ Its architectural design prioritizes deterministic execution, minimal processing
 ## 2. Architectural Style & Design Principles
 - **Boundary Gateway Pattern:** Acts as the single point of entry for managed API traffic, enforcing policy before any business compute occurs.
 - **Layered Architecture:** Enforces strict unidirectional dependencies across 4 layers:
-  $$\text{Servlet / Controller} \longrightarrow \text{Business Service} \longrightarrow \text{DAO / Repository} \longrightarrow \text{PostgreSQL}$$
+  $$\text{Servlet / Controller} \longrightarrow \text{Business Service} \longrightarrow \text{DAO / Repository} \longrightarrow \text{MySQL 8.x}$$
 - **Strategy Pattern:** Decouples the rate-limiting engine from concrete algorithm implementations via the `RateLimitStrategy` interface.
 - **Framework-Free Core:** Deliberately eliminates Spring Boot, Spring MVC, and ORMs to prevent runtime overhead, hidden reflection, and magic annotations.
 
@@ -46,7 +46,7 @@ flowchart LR
     end
 
     subgraph PersistentStore["Persistence Layer"]
-        Postgres[(PostgreSQL 15+\nClients, Keys, Policies, Logs)]
+        MySQL[(MySQL 8.x\nClients, Keys, Policies, Logs)]
     end
 
     subgraph TargetServices["Protected Infrastructure"]
@@ -69,9 +69,9 @@ flowchart LR
     LogService --> LogRepo
     DashboardAPI --> LogRepo
     
-    KeyRepo --> Postgres
-    PolicyRepo --> Postgres
-    LogRepo --> Postgres
+    KeyRepo --> MySQL
+    PolicyRepo --> MySQL
+    LogRepo --> MySQL
     
     ServletGateway -->|Allowed Traffic| ProtectedAPI
     ServletGateway -->|Rejected Traffic (429)| Client
@@ -89,7 +89,7 @@ flowchart TD
     Val -->|Invalid| Err400[Return 400 Bad Request]
     
     Auth -->|Lookup Key Hash| KeyDAO[ApiKeyDAO]
-    KeyDAO --> DB[(PostgreSQL)]
+    KeyDAO --> DB[(MySQL 8.x)]
     Auth -->|Key Valid & Active| Policy[PolicyService]
     Auth -->|Missing / Invalid Key| Err401[Return 401 / 403]
     
@@ -122,7 +122,7 @@ flowchart TD
 | **Presentation / Servlets** | Handles HTTP requests, extracts headers (`X-API-Key`), maps JSON responses, assigns status codes. | `com.throttlix.controller` | Jakarta Servlet API 6.0, Jackson |
 | **Service Layer** | Orchestrates authentication logic, validates request structure, resolves policies, and interfaces with the rate limiter. | `com.throttlix.service` | Pure Java 21 |
 | **Rate Limiter Engine** | Implements concurrency-safe Token Bucket and Sliding Window algorithms; maintains fast in-memory counter states. | `com.throttlix.ratelimiter` | `ConcurrentHashMap`, `AtomicLong`, Java Collections |
-| **Data Access (DAO)** | Performs parameterized SQL queries against PostgreSQL for clients, keys, policies, and telemetry logs. | `com.throttlix.dao` | JDBC `PreparedStatement`, `Connection` |
+| **Data Access (DAO)** | Performs parameterized SQL queries against MySQL for clients, keys, policies, and telemetry logs. | `com.throttlix.dao` | JDBC `PreparedStatement`, `Connection` |
 | **Data Models (POJOs)** | Immutable domain entities, data transfer objects (DTOs), and configuration models. | `com.throttlix.model` | Java Records / POJOs |
 
 ---
