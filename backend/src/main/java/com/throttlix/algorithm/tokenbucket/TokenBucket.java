@@ -9,6 +9,15 @@ public class TokenBucket {
     private long lastRefillTime;
 
     public TokenBucket(int maxTokens, int refillTokens, long refillDurationMillis, long initialTimeMillis) {
+        if (maxTokens <= 0) {
+            throw new IllegalArgumentException("Max tokens must be greater than 0");
+        }
+        if (refillTokens <= 0) {
+            throw new IllegalArgumentException("Refill tokens must be greater than 0");
+        }
+        if (refillDurationMillis <= 0) {
+            throw new IllegalArgumentException("Refill duration must be greater than 0");
+        }
         this.maxTokens = maxTokens;
         this.refillTokens = refillTokens;
         this.refillDurationMillis = refillDurationMillis;
