@@ -2,9 +2,12 @@ package com.throttlix.database;
 
 import org.junit.jupiter.api.Test;
 
+import java.sql.SQLException;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DatabaseConfigTest {
@@ -32,5 +35,13 @@ class DatabaseConfigTest {
         assertFalse(str.contains("super_secret_pw"));
         assertEquals("jdbc:mysql://localhost:3306/throttlix", config.getUrl());
         assertEquals("test_user", config.getUsername());
+    }
+
+    @Test
+    void shouldThrowSQLExceptionWithMaskedDetailsWhenConnectionFails() {
+        DatabaseConfig badConfig = new DatabaseConfig("jdbc:mysql://localhost:65530/throttlix", "test_user", "secret_pass_123");
+        SQLException exception = assertThrows(SQLException.class, badConfig::getConnection);
+        assertTrue(exception.getMessage().contains("Failed to establish database connection"));
+        assertFalse(exception.getMessage().contains("secret_pass_123"));
     }
 }
