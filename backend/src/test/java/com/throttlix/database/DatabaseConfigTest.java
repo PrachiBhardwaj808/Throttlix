@@ -44,4 +44,10 @@ class DatabaseConfigTest {
         assertTrue(exception.getMessage().contains("Failed to establish database connection"));
         assertFalse(exception.getMessage().contains("secret_pass_123"));
     }
+
+    @Test
+    void shouldReturnFalseWhenTestConnectionFails() {
+        DatabaseConfig badConfig = new DatabaseConfig("jdbc:mysql://localhost:65530/throttlix", "test_user", "secret_pass_123");
+        assertFalse(badConfig.testConnection());
+    }
 }

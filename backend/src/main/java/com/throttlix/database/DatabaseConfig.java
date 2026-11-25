@@ -76,6 +76,42 @@ public class DatabaseConfig {
         }
     }
 
+    /**
+     * Verifies connectivity to the configured MySQL database.
+     * Uses try-with-resources to ensure the opened connection is cleanly closed.
+     *
+     * @return true if a connection can be established and is valid; false otherwise
+     */
+    public boolean testConnection() {
+        try (Connection connection = getConnection()) {
+            return connection != null && connection.isValid(5);
+        } catch (SQLException e) {
+            LOGGER.log(Level.WARNING, () -> "Database connectivity test failed for: " + getMaskedUrl());
+            return false;
+        }
+    }
+
+    /**
+     * Command-line diagnostic entry point to test database connectivity.
+     * Uses try-with-resources for safe resource management.
+     *
+     * @param args optional command line arguments
+     */
+    public static void main(String[] args) {
+        DatabaseConfig config = new DatabaseConfig();
+        System.out.println("Testing MySQL database connection to: " + config.getMaskedUrl());
+        System.out.println("User: " + config.getUsername());
+        try (Connection connection = config.getConnection()) {
+            if (connection.isValid(5)) {
+                System.out.println("SUCCESS: Connected to MySQL database successfully!");
+            }
+        } catch (SQLException e) {
+            System.err.println("FAILURE: Unable to connect to MySQL database.");
+            System.err.println("Reason: " + e.getMessage());
+            System.err.println("Tip: Ensure MySQL is running and set DB_PASSWORD if required.");
+        }
+    }
+
     public String getUrl() {
         return url;
     }
