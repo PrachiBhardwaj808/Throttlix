@@ -104,11 +104,10 @@ CREATE TABLE IF NOT EXISTS api_keys (
     CONSTRAINT pk_api_keys PRIMARY KEY (api_key_id),
     CONSTRAINT uk_api_keys_hash UNIQUE (key_hash),
     CONSTRAINT fk_api_keys_client FOREIGN KEY (client_id)
-        REFERENCES clients (client_id) ON DELETE CASCADE
+        REFERENCES clients (client_id) ON DELETE CASCADE,
+    INDEX idx_api_keys_hash_active (key_hash, active),
+    INDEX idx_api_keys_client_id (client_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE INDEX idx_api_keys_hash_active ON api_keys (key_hash, active);
-CREATE INDEX idx_api_keys_client_id ON api_keys (client_id);
 ```
 
 ### 3.3 `rate_limit_policies` Table
@@ -145,10 +144,9 @@ CREATE TABLE IF NOT EXISTS client_policies (
     CONSTRAINT fk_client_policies_client FOREIGN KEY (client_id)
         REFERENCES clients (client_id) ON DELETE CASCADE,
     CONSTRAINT fk_client_policies_policy FOREIGN KEY (policy_id)
-        REFERENCES rate_limit_policies (policy_id) ON DELETE RESTRICT
+        REFERENCES rate_limit_policies (policy_id) ON DELETE RESTRICT,
+    INDEX idx_client_policies_policy_id (policy_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE INDEX idx_client_policies_policy_id ON client_policies (policy_id);
 ```
 
 ### 3.5 `request_logs` Table
@@ -169,11 +167,10 @@ CREATE TABLE IF NOT EXISTS request_logs (
     CONSTRAINT fk_request_logs_client FOREIGN KEY (client_id)
         REFERENCES clients (client_id) ON DELETE SET NULL,
     CONSTRAINT fk_request_logs_api_key FOREIGN KEY (api_key_id)
-        REFERENCES api_keys (api_key_id) ON DELETE SET NULL
+        REFERENCES api_keys (api_key_id) ON DELETE SET NULL,
+    INDEX idx_request_logs_client_time (client_id, requested_at DESC),
+    INDEX idx_request_logs_analytics (requested_at DESC, allowed)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE INDEX idx_request_logs_client_time ON request_logs (client_id, requested_at DESC);
-CREATE INDEX idx_request_logs_analytics ON request_logs (requested_at DESC, allowed);
 ```
 
 ---
