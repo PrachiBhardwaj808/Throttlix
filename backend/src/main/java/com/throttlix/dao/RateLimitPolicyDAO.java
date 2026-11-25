@@ -12,6 +12,7 @@ import java.util.Optional;
 
 public class RateLimitPolicyDAO {
 
+    // Query 1: Find the active policy for a client by joining clients, client_policies, and rate_limit_policies
     private static final String FIND_ACTIVE_POLICY_SQL = """
             SELECT p.policy_id,
                    c.name AS client_name,
@@ -29,6 +30,7 @@ public class RateLimitPolicyDAO {
               AND p.enabled = TRUE
             """;
 
+    // Query 2: Insert a new rate limit policy
     private static final String INSERT_POLICY_SQL = """
             INSERT INTO rate_limit_policies (
                 name, algorithm, request_limit, window_seconds,
@@ -36,12 +38,14 @@ public class RateLimitPolicyDAO {
             ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """;
 
+    // Query 3: Assign a policy to a client (or update if already assigned)
     private static final String ASSIGN_POLICY_SQL = """
             INSERT INTO client_policies (client_id, policy_id)
             VALUES (?, ?)
             ON DUPLICATE KEY UPDATE policy_id = VALUES(policy_id), assigned_at = CURRENT_TIMESTAMP
             """;
 
+    // Query 4: Update an existing policy's parameters
     private static final String UPDATE_POLICY_SQL = """
             UPDATE rate_limit_policies
             SET request_limit = ?,
@@ -51,6 +55,7 @@ public class RateLimitPolicyDAO {
             WHERE policy_id = ?
             """;
 
+    // Query 5: Find a policy by its primary key ID
     private static final String FIND_POLICY_BY_ID_SQL = """
             SELECT policy_id,
                    name,

@@ -12,29 +12,34 @@ import java.util.Optional;
 
 public class ClientDAO {
 
+    // Query 1: Insert a new client organization into the clients table
     private static final String INSERT_CLIENT_SQL = """
             INSERT INTO clients (name, active)
             VALUES (?, TRUE)
             """;
 
+    // Query 2: Find a client record by their unique name
     private static final String FIND_CLIENT_BY_NAME_SQL = """
             SELECT client_id, name, active, created_at
             FROM clients
             WHERE name = ?
             """;
 
+    // Query 3: Find a client record by their primary key (client_id)
     private static final String FIND_CLIENT_BY_ID_SQL = """
             SELECT client_id, name, active, created_at
             FROM clients
             WHERE client_id = ?
             """;
 
+    // Query 4: Check if a client is active
     private static final String IS_CLIENT_ACTIVE_SQL = """
             SELECT active
             FROM clients
             WHERE name = ?
             """;
 
+    // Query 5: Update the active status (true/false) of a client
     private static final String UPDATE_CLIENT_STATUS_SQL = """
             UPDATE clients
             SET active = ?

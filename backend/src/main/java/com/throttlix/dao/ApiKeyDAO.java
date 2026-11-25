@@ -12,11 +12,13 @@ import java.util.Optional;
 
 public class ApiKeyDAO {
 
+    // Query 1: Insert a new hashed API key for a client
     private static final String INSERT_API_KEY_SQL = """
             INSERT INTO api_keys (client_id, name, key_hash, active)
             VALUES (?, ?, ?, TRUE)
             """;
 
+    // Query 2: Verify active API key and find the client name using a JOIN
     private static final String VERIFY_ACTIVE_KEY_SQL = """
             SELECT c.name AS client_name
             FROM api_keys k
@@ -26,6 +28,7 @@ public class ApiKeyDAO {
               AND c.active = TRUE
             """;
 
+    // Query 3: Revoke an API key by setting active = FALSE
     private static final String REVOKE_API_KEY_SQL = """
             UPDATE api_keys
             SET active = FALSE,
@@ -34,6 +37,7 @@ public class ApiKeyDAO {
               AND active = TRUE
             """;
 
+    // Query 4: Find an API key record by its SHA-256 hash
     private static final String FIND_KEY_BY_HASH_SQL = """
             SELECT api_key_id, client_id, name, key_hash, active, created_at, revoked_at
             FROM api_keys
