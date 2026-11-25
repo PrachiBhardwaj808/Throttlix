@@ -5,10 +5,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.throttlix.model.ApiKey;
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -22,14 +24,31 @@ class ApiKeyDAOTest {
 
     @Test
     void shouldCreateApiKeyAndReturnGeneratedKey() throws Exception {
-        Connection connection = mockConnectionWithGeneratedKey(42L);
+        Connection connection = mock(Connection.class);
+        PreparedStatement statement = mock(PreparedStatement.class);
+        ResultSet generatedKeys = mock(ResultSet.class);
+
+        when(connection.prepareStatement(anyString(), anyInt())).thenReturn(statement);
+        when(statement.executeUpdate()).thenReturn(1);
+        when(statement.getGeneratedKeys()).thenReturn(generatedKeys);
+        when(generatedKeys.next()).thenReturn(true);
+        when(generatedKeys.getLong(1)).thenReturn(42L);
+
         long keyId = apiKeyDAO.createApiKey(connection, 1L, "mobile-primary", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
         assertEquals(42L, keyId);
     }
 
     @Test
     void shouldFindClientByActiveKeyHash() throws Exception {
-        Connection connection = mockConnectionWithClientName("client-mobile");
+        Connection connection = mock(Connection.class);
+        PreparedStatement statement = mock(PreparedStatement.class);
+        ResultSet resultSet = mock(ResultSet.class);
+
+        when(connection.prepareStatement(anyString())).thenReturn(statement);
+        when(statement.executeQuery()).thenReturn(resultSet);
+        when(resultSet.next()).thenReturn(true);
+        when(resultSet.getString("client_name")).thenReturn("client-mobile");
+
         Optional<String> client = apiKeyDAO.findClientByActiveKeyHash(connection, "hash12345");
         assertTrue(client.isPresent());
         assertEquals("client-mobile", client.get());
@@ -37,14 +56,33 @@ class ApiKeyDAOTest {
 
     @Test
     void shouldRevokeApiKeySuccessfully() throws Exception {
-        Connection connection = mockConnectionWithUpdateCount(1);
+        Connection connection = mock(Connection.class);
+        PreparedStatement statement = mock(PreparedStatement.class);
+
+        when(connection.prepareStatement(anyString())).thenReturn(statement);
+        when(statement.executeUpdate()).thenReturn(1);
+
         boolean revoked = apiKeyDAO.revokeApiKey(connection, "hash12345");
         assertTrue(revoked);
     }
 
     @Test
     void shouldFindApiKeyByHash() throws Exception {
-        Connection connection = mockConnectionWithApiKeyRow(10L, 2L, "prod-key", "hash12345", true);
+        Connection connection = mock(Connection.class);
+        PreparedStatement statement = mock(PreparedStatement.class);
+        ResultSet resultSet = mock(ResultSet.class);
+
+        when(connection.prepareStatement(anyString())).thenReturn(statement);
+        when(statement.executeQuery()).thenReturn(resultSet);
+        when(resultSet.next()).thenReturn(true);
+        when(resultSet.getLong("api_key_id")).thenReturn(10L);
+        when(resultSet.getLong("client_id")).thenReturn(2L);
+        when(resultSet.getString("name")).thenReturn("prod-key");
+        when(resultSet.getString("key_hash")).thenReturn("hash12345");
+        when(resultSet.getBoolean("active")).thenReturn(true);
+        when(resultSet.getTimestamp("created_at")).thenReturn(new Timestamp(System.currentTimeMillis()));
+        when(resultSet.getTimestamp("revoked_at")).thenReturn(null);
+
         Optional<ApiKey> apiKey = apiKeyDAO.findByKeyHash(connection, "hash12345");
         assertTrue(apiKey.isPresent());
         assertEquals(10L, apiKey.get().apiKeyId());
@@ -56,101 +94,11 @@ class ApiKeyDAOTest {
 
     @Test
     void shouldRejectInvalidInput() throws Exception {
-        Connection connection = mockBasicConnection();
+        Connection connection = mock(Connection.class);
         assertThrows(IllegalArgumentException.class, () -> apiKeyDAO.createApiKey(null, 1L, "name", "hash"));
         assertThrows(IllegalArgumentException.class, () -> apiKeyDAO.createApiKey(connection, 1L, "  ", "hash"));
         assertThrows(IllegalArgumentException.class, () -> apiKeyDAO.createApiKey(connection, 1L, "name", "  "));
         assertFalse(apiKeyDAO.revokeApiKey(connection, "  "));
         assertTrue(apiKeyDAO.findClientByActiveKeyHash(connection, "").isEmpty());
-    }
-
-    @SuppressWarnings("unchecked")
-    private <T> T proxy(Class<T> type, InvocationHandler handler) {
-        return (T) Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[]{type}, handler);
-    }
-
-    private Connection mockBasicConnection() {
-        return proxy(Connection.class, (p, m, a) -> null);
-    }
-
-    private Connection mockConnectionWithGeneratedKey(long key) {
-        ResultSet keysRs = proxy(ResultSet.class, (p, m, a) -> switch (m.getName()) {
-            case "next" -> true;
-            case "getLong" -> key;
-            case "close" -> null;
-            default -> null;
-        });
-
-        PreparedStatement stmt = proxy(PreparedStatement.class, (p, m, a) -> switch (m.getName()) {
-            case "setLong", "setString" -> null;
-            case "executeUpdate" -> 1;
-            case "getGeneratedKeys" -> keysRs;
-            case "close" -> null;
-            default -> null;
-        });
-
-        return proxy(Connection.class, (p, m, a) -> {
-            if ("prepareStatement".equals(m.getName())) return stmt;
-            return null;
-        });
-    }
-
-    private Connection mockConnectionWithClientName(String clientName) {
-        ResultSet rs = proxy(ResultSet.class, (p, m, a) -> switch (m.getName()) {
-            case "next" -> true;
-            case "getString" -> clientName;
-            case "close" -> null;
-            default -> null;
-        });
-
-        PreparedStatement stmt = proxy(PreparedStatement.class, (p, m, a) -> switch (m.getName()) {
-            case "setString" -> null;
-            case "executeQuery" -> rs;
-            case "close" -> null;
-            default -> null;
-        });
-
-        return proxy(Connection.class, (p, m, a) -> {
-            if ("prepareStatement".equals(m.getName())) return stmt;
-            return null;
-        });
-    }
-
-    private Connection mockConnectionWithUpdateCount(int count) {
-        PreparedStatement stmt = proxy(PreparedStatement.class, (p, m, a) -> switch (m.getName()) {
-            case "setString" -> null;
-            case "executeUpdate" -> count;
-            case "close" -> null;
-            default -> null;
-        });
-
-        return proxy(Connection.class, (p, m, a) -> {
-            if ("prepareStatement".equals(m.getName())) return stmt;
-            return null;
-        });
-    }
-
-    private Connection mockConnectionWithApiKeyRow(long id, long clientId, String name, String hash, boolean active) {
-        ResultSet rs = proxy(ResultSet.class, (p, m, a) -> switch (m.getName()) {
-            case "next" -> true;
-            case "getLong" -> "api_key_id".equals(a[0]) ? id : clientId;
-            case "getString" -> "name".equals(a[0]) ? name : hash;
-            case "getBoolean" -> active;
-            case "getTimestamp" -> "created_at".equals(a[0]) ? new Timestamp(System.currentTimeMillis()) : null;
-            case "close" -> null;
-            default -> null;
-        });
-
-        PreparedStatement stmt = proxy(PreparedStatement.class, (p, m, a) -> switch (m.getName()) {
-            case "setString" -> null;
-            case "executeQuery" -> rs;
-            case "close" -> null;
-            default -> null;
-        });
-
-        return proxy(Connection.class, (p, m, a) -> {
-            if ("prepareStatement".equals(m.getName())) return stmt;
-            return null;
-        });
     }
 }

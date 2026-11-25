@@ -4,10 +4,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.throttlix.model.Client;
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -21,14 +23,34 @@ class ClientDAOTest {
 
     @Test
     void shouldCreateClientAndReturnGeneratedKey() throws Exception {
-        Connection connection = mockConnectionWithGeneratedKey(101L);
+        Connection connection = mock(Connection.class);
+        PreparedStatement statement = mock(PreparedStatement.class);
+        ResultSet generatedKeys = mock(ResultSet.class);
+
+        when(connection.prepareStatement(anyString(), anyInt())).thenReturn(statement);
+        when(statement.executeUpdate()).thenReturn(1);
+        when(statement.getGeneratedKeys()).thenReturn(generatedKeys);
+        when(generatedKeys.next()).thenReturn(true);
+        when(generatedKeys.getLong(1)).thenReturn(101L);
+
         long clientId = clientDAO.createClient(connection, "client-enterprise");
         assertEquals(101L, clientId);
     }
 
     @Test
     void shouldFindClientByName() throws Exception {
-        Connection connection = mockConnectionWithClientRow(1L, "client-analytics", true);
+        Connection connection = mock(Connection.class);
+        PreparedStatement statement = mock(PreparedStatement.class);
+        ResultSet resultSet = mock(ResultSet.class);
+
+        when(connection.prepareStatement(anyString())).thenReturn(statement);
+        when(statement.executeQuery()).thenReturn(resultSet);
+        when(resultSet.next()).thenReturn(true);
+        when(resultSet.getLong("client_id")).thenReturn(1L);
+        when(resultSet.getString("name")).thenReturn("client-analytics");
+        when(resultSet.getBoolean("active")).thenReturn(true);
+        when(resultSet.getTimestamp("created_at")).thenReturn(new Timestamp(System.currentTimeMillis()));
+
         Optional<Client> client = clientDAO.findClientByName(connection, "client-analytics");
         assertTrue(client.isPresent());
         assertEquals(1L, client.get().clientId());
@@ -39,7 +61,15 @@ class ClientDAOTest {
 
     @Test
     void shouldCheckIfClientIsActive() throws Exception {
-        Connection connection = mockConnectionWithActiveStatus(true);
+        Connection connection = mock(Connection.class);
+        PreparedStatement statement = mock(PreparedStatement.class);
+        ResultSet resultSet = mock(ResultSet.class);
+
+        when(connection.prepareStatement(anyString())).thenReturn(statement);
+        when(statement.executeQuery()).thenReturn(resultSet);
+        when(resultSet.next()).thenReturn(true);
+        when(resultSet.getBoolean("active")).thenReturn(true);
+
         Optional<Boolean> active = clientDAO.isClientActive(connection, "client-mobile");
         assertTrue(active.isPresent());
         assertTrue(active.get());
@@ -47,7 +77,7 @@ class ClientDAOTest {
 
     @Test
     void shouldRejectNullOrBlankClientName() {
-        Connection connection = mockBasicConnection();
+        Connection connection = mock(Connection.class);
         assertThrows(IllegalArgumentException.class, () -> clientDAO.createClient(null, "valid"));
         assertThrows(IllegalArgumentException.class, () -> clientDAO.createClient(connection, "   "));
         assertThrows(IllegalArgumentException.class, () -> clientDAO.findClientByName(connection, ""));
@@ -56,98 +86,13 @@ class ClientDAOTest {
 
     @Test
     void shouldUpdateClientStatus() throws Exception {
-        Connection connection = mockConnectionWithUpdateCount(1);
+        Connection connection = mock(Connection.class);
+        PreparedStatement statement = mock(PreparedStatement.class);
+
+        when(connection.prepareStatement(anyString())).thenReturn(statement);
+        when(statement.executeUpdate()).thenReturn(1);
+
         boolean updated = clientDAO.setClientActive(connection, 1L, false);
         assertTrue(updated);
-    }
-
-    @SuppressWarnings("unchecked")
-    private <T> T proxy(Class<T> type, InvocationHandler handler) {
-        return (T) Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[]{type}, handler);
-    }
-
-    private Connection mockBasicConnection() {
-        return proxy(Connection.class, (p, m, a) -> null);
-    }
-
-    private Connection mockConnectionWithGeneratedKey(long key) {
-        ResultSet keysRs = proxy(ResultSet.class, (p, m, a) -> switch (m.getName()) {
-            case "next" -> true;
-            case "getLong" -> key;
-            case "close" -> null;
-            default -> null;
-        });
-
-        PreparedStatement stmt = proxy(PreparedStatement.class, (p, m, a) -> switch (m.getName()) {
-            case "setString" -> null;
-            case "executeUpdate" -> 1;
-            case "getGeneratedKeys" -> keysRs;
-            case "close" -> null;
-            default -> null;
-        });
-
-        return proxy(Connection.class, (p, m, a) -> {
-            if ("prepareStatement".equals(m.getName())) return stmt;
-            return null;
-        });
-    }
-
-    private Connection mockConnectionWithClientRow(long id, String name, boolean active) {
-        ResultSet rs = proxy(ResultSet.class, (p, m, a) -> switch (m.getName()) {
-            case "next" -> true;
-            case "getLong" -> id;
-            case "getString" -> name;
-            case "getBoolean" -> active;
-            case "getTimestamp" -> new Timestamp(System.currentTimeMillis());
-            case "close" -> null;
-            default -> null;
-        });
-
-        PreparedStatement stmt = proxy(PreparedStatement.class, (p, m, a) -> switch (m.getName()) {
-            case "setString", "setLong" -> null;
-            case "executeQuery" -> rs;
-            case "close" -> null;
-            default -> null;
-        });
-
-        return proxy(Connection.class, (p, m, a) -> {
-            if ("prepareStatement".equals(m.getName())) return stmt;
-            return null;
-        });
-    }
-
-    private Connection mockConnectionWithActiveStatus(boolean active) {
-        ResultSet rs = proxy(ResultSet.class, (p, m, a) -> switch (m.getName()) {
-            case "next" -> true;
-            case "getBoolean" -> active;
-            case "close" -> null;
-            default -> null;
-        });
-
-        PreparedStatement stmt = proxy(PreparedStatement.class, (p, m, a) -> switch (m.getName()) {
-            case "setString" -> null;
-            case "executeQuery" -> rs;
-            case "close" -> null;
-            default -> null;
-        });
-
-        return proxy(Connection.class, (p, m, a) -> {
-            if ("prepareStatement".equals(m.getName())) return stmt;
-            return null;
-        });
-    }
-
-    private Connection mockConnectionWithUpdateCount(int count) {
-        PreparedStatement stmt = proxy(PreparedStatement.class, (p, m, a) -> switch (m.getName()) {
-            case "setBoolean", "setLong" -> null;
-            case "executeUpdate" -> count;
-            case "close" -> null;
-            default -> null;
-        });
-
-        return proxy(Connection.class, (p, m, a) -> {
-            if ("prepareStatement".equals(m.getName())) return stmt;
-            return null;
-        });
     }
 }
