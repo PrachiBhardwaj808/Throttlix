@@ -2,7 +2,6 @@ package com.throttlix.integration;
 
 import com.throttlix.auth.ApiKeyAuthService;
 import com.throttlix.controller.RateLimitServlet;
-import com.throttlix.core.AlgorithmType;
 import com.throttlix.core.RateLimitPolicy;
 import com.throttlix.dao.ApiKeyDAO;
 import com.throttlix.dao.RateLimitPolicyDAO;
@@ -15,11 +14,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Proxy;
 import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;

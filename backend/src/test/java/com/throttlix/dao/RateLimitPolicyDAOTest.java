@@ -32,6 +32,7 @@ class RateLimitPolicyDAOTest {
         assertEquals(100, policy.getLimit());
         assertEquals(60_000L, policy.getWindowDurationMillis());
         assertEquals("client-a", query.statement().clientId);
+        assertTrue(query.statement().sql.contains("client_policies"));
     }
 
     @Test
@@ -44,6 +45,7 @@ class RateLimitPolicyDAOTest {
         assertEquals(100, policy.getLimit());
         assertEquals(5, policy.getRefillTokens());
         assertEquals(2_000L, policy.getRefillDurationMillis());
+        assertTrue(query.statement().sql.contains("client_policies"));
     }
 
     @Test
