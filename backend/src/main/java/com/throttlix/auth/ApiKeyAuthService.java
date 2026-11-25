@@ -13,11 +13,6 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/**
- * Authentication service responsible for verifying API keys.
- * Uses ApiKeyDAO to verify SHA-256 key hashes against MySQL,
- * falling back to in-memory development keys when database is offline or unpopulated.
- */
 public class ApiKeyAuthService {
 
     private static final Logger LOGGER = Logger.getLogger(ApiKeyAuthService.class.getName());
@@ -33,59 +28,48 @@ public class ApiKeyAuthService {
     public ApiKeyAuthService(ApiKeyDAO apiKeyDAO, DatabaseConfig databaseConfig) {
         this.apiKeyDAO = apiKeyDAO;
         this.databaseConfig = databaseConfig;
-        initializeDevelopmentKeys();
+        loadDevelopmentKeys();
     }
 
-    private void initializeDevelopmentKeys() {
+    private void loadDevelopmentKeys() {
         keyToClientMap.put("thx-test-key-1", "client-analytics");
         keyToClientMap.put("thx-test-key-2", "client-mobile");
         keyToClientMap.put("dev-token-bucket-key", "client-analytics");
         keyToClientMap.put("dev-sliding-window-key", "client-mobile");
     }
 
-    /**
-     * Authenticates an API key.
-     * 1. Checks validity of input format.
-     * 2. Hashes key using SHA-256 and queries MySQL via ApiKeyDAO.
-     * 3. If MySQL query succeeds, returns mapped client ID.
-     * 4. If key is not in DB or DB is offline, checks in-memory test map.
-     * 5. Returns null if key is invalid, missing, or revoked.
-     *
-     * @param apiKey raw API key from X-API-Key header
-     * @return client ID if authenticated; null otherwise
-     */
     public String authenticate(String apiKey) {
         if (apiKey == null) {
             LOGGER.warning("Authentication failed: missing API key");
             return null;
         }
 
-        String trimmedKey = apiKey.trim();
-        if (trimmedKey.isEmpty()) {
+        String cleanKey = apiKey.trim();
+        if (cleanKey.isEmpty()) {
             LOGGER.warning("Authentication failed: empty API key");
             return null;
         }
 
-        // 1. Try MySQL Database Authentication via ApiKeyDAO
+        // 1. Try to find the client in the MySQL database
         if (apiKeyDAO != null && databaseConfig != null) {
             try (Connection connection = databaseConfig.getConnection()) {
-                String keyHash = hashKey(trimmedKey);
+                String keyHash = hashKey(cleanKey);
                 Optional<String> clientId = apiKeyDAO.findClientByActiveKeyHash(connection, keyHash);
                 if (clientId.isPresent()) {
                     String resolvedClient = clientId.get();
-                    LOGGER.info(() -> "Authentication successful via MySQL for client ID: " + resolvedClient);
+                    LOGGER.info(() -> "Authentication successful via MySQL for client: " + resolvedClient);
                     return resolvedClient;
                 }
             } catch (SQLException e) {
-                // Safe degradation: never leak SQL exceptions, never approve request on DB error
-                LOGGER.log(Level.WARNING, () -> "MySQL authentication unavailable or connection failed (" + e.getMessage() + ")");
+                // If database is unreachable, log warning and fall back to local test keys
+                LOGGER.log(Level.WARNING, () -> "MySQL authentication unavailable: " + e.getMessage());
             }
         }
 
-        // 2. Check development/test in-memory map
-        String inMemoryClient = keyToClientMap.get(trimmedKey);
+        // 2. Check in-memory development keys
+        String inMemoryClient = keyToClientMap.get(cleanKey);
         if (inMemoryClient != null) {
-            LOGGER.info(() -> "Authentication successful (in-memory) for client ID: " + inMemoryClient);
+            LOGGER.info(() -> "Authentication successful (in-memory) for client: " + inMemoryClient);
             return inMemoryClient;
         }
 
@@ -95,21 +79,14 @@ public class ApiKeyAuthService {
 
     public void registerKey(String apiKey, String clientId) {
         if (apiKey != null && clientId != null) {
-            String trimmedKey = apiKey.trim();
-            String trimmedClient = clientId.trim();
-            if (!trimmedKey.isEmpty() && !trimmedClient.isEmpty()) {
-                keyToClientMap.put(trimmedKey, trimmedClient);
+            String cleanKey = apiKey.trim();
+            String cleanClient = clientId.trim();
+            if (!cleanKey.isEmpty() && !cleanClient.isEmpty()) {
+                keyToClientMap.put(cleanKey, cleanClient);
             }
         }
     }
 
-    /**
-     * Computes the SHA-256 hexadecimal digest for an API key.
-     * Ensures raw keys are never passed to persistent storage.
-     *
-     * @param rawKey the raw API key secret
-     * @return 64-character lowercase hexadecimal hash string
-     */
     public static String hashKey(String rawKey) {
         if (rawKey == null) {
             return null;

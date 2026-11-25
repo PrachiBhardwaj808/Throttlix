@@ -10,10 +10,6 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Optional;
 
-/**
- * Data Access Object for managing client API keys in MySQL.
- * Strictly stores cryptographic hashes (SHA-256) and never raw API keys.
- */
 public class ApiKeyDAO {
 
     private static final String INSERT_API_KEY_SQL = """
@@ -44,17 +40,6 @@ public class ApiKeyDAO {
             WHERE key_hash = ?
             """;
 
-    /**
-     * Stores a new API key record with a cryptographic SHA-256 key hash.
-     * Raw keys must never be passed to or stored in this method.
-     *
-     * @param connection active JDBC connection
-     * @param clientId   associated client foreign key
-     * @param keyName    label/description for the key
-     * @param keyHash    64-character hexadecimal SHA-256 hash
-     * @return generated api_key_id
-     * @throws SQLException if insertion fails
-     */
     public long createApiKey(Connection connection, long clientId, String keyName, String keyHash) throws SQLException {
         if (connection == null) {
             throw new IllegalArgumentException("Database connection is required");
@@ -81,14 +66,6 @@ public class ApiKeyDAO {
         }
     }
 
-    /**
-     * Verifies an incoming SHA-256 key hash.
-     * Only returns the client name if both the API key and its owning client are currently active.
-     *
-     * @param connection active JDBC connection
-     * @param keyHash    64-character hexadecimal SHA-256 hash
-     * @return client name if authenticated; empty otherwise
-     */
     public Optional<String> findClientByActiveKeyHash(Connection connection, String keyHash) throws SQLException {
         if (connection == null) {
             throw new IllegalArgumentException("Database connection is required");
@@ -108,13 +85,6 @@ public class ApiKeyDAO {
         }
     }
 
-    /**
-     * Revokes an active API key by setting active = FALSE and stamping revoked_at.
-     *
-     * @param connection active JDBC connection
-     * @param keyHash    64-character hexadecimal SHA-256 hash
-     * @return true if a key was revoked; false if not found or already revoked
-     */
     public boolean revokeApiKey(Connection connection, String keyHash) throws SQLException {
         if (connection == null) {
             throw new IllegalArgumentException("Database connection is required");
@@ -129,9 +99,6 @@ public class ApiKeyDAO {
         }
     }
 
-    /**
-     * Retrieves an API key entity by its hash.
-     */
     public Optional<ApiKey> findByKeyHash(Connection connection, String keyHash) throws SQLException {
         if (connection == null) {
             throw new IllegalArgumentException("Database connection is required");

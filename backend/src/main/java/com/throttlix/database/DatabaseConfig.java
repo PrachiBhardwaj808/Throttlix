@@ -76,12 +76,6 @@ public class DatabaseConfig {
         }
     }
 
-    /**
-     * Verifies connectivity to the configured MySQL database.
-     * Uses try-with-resources to ensure the opened connection is cleanly closed.
-     *
-     * @return true if a connection can be established and is valid; false otherwise
-     */
     public boolean testConnection() {
         try (Connection connection = getConnection()) {
             return connection != null && connection.isValid(5);
@@ -91,12 +85,6 @@ public class DatabaseConfig {
         }
     }
 
-    /**
-     * Command-line diagnostic entry point to test database connectivity.
-     * Uses try-with-resources for safe resource management.
-     *
-     * @param args optional command line arguments
-     */
     public static void main(String[] args) {
         DatabaseConfig config = new DatabaseConfig();
         System.out.println("Testing MySQL database connection to: " + config.getMaskedUrl());

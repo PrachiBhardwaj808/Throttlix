@@ -7,11 +7,7 @@ public class RateLimitResult {
     private final Long retryAfterMillis;
     private final String message;
 
-    public RateLimitResult(
-            boolean allowed,
-            double remainingCapacity,
-            Long retryAfterMillis,
-            String message) {
+    public RateLimitResult(boolean allowed, double remainingCapacity, Long retryAfterMillis, String message) {
         this.allowed = allowed;
         this.remainingCapacity = remainingCapacity;
         this.retryAfterMillis = retryAfterMillis;
@@ -26,13 +22,15 @@ public class RateLimitResult {
         return new RateLimitResult(false, remainingCapacity, retryAfterMillis, message);
     }
 
-    // Getters
-
     public boolean isAllowed() {
         return allowed;
     }
 
     public double getRemainingCapacity() {
+        return remainingCapacity;
+    }
+
+    public double getRemainingTokens() {
         return remainingCapacity;
     }
 
@@ -46,11 +44,9 @@ public class RateLimitResult {
 
     @Override
     public String toString() {
-        return "RateLimitResult["
-                + "allowed=" + allowed
-                + ", remainingCapacity=" + remainingCapacity
-                + ", retryAfterMillis=" + (retryAfterMillis != null ? retryAfterMillis + "ms" : "N/A")
-                + ", message='" + message + '\''
-                + ']';
+        return "RateLimitResult[allowed=" + allowed
+                + ", remaining=" + remainingCapacity
+                + ", retryAfter=" + (retryAfterMillis != null ? retryAfterMillis + "ms" : "N/A")
+                + ", message='" + message + "']";
     }
 }

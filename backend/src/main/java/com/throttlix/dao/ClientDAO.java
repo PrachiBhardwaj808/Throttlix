@@ -10,9 +10,6 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Optional;
 
-/**
- * Data Access Object for managing client accounts in MySQL.
- */
 public class ClientDAO {
 
     private static final String INSERT_CLIENT_SQL = """
@@ -44,15 +41,6 @@ public class ClientDAO {
             WHERE client_id = ?
             """;
 
-    /**
-     * Creates a new client organization in MySQL.
-     * Uses JDBC Statement.RETURN_GENERATED_KEYS to retrieve the AUTO_INCREMENT primary key.
-     *
-     * @param connection active JDBC connection
-     * @param name       unique client identifier
-     * @return generated client_id
-     * @throws SQLException if execution or key retrieval fails
-     */
     public long createClient(Connection connection, String name) throws SQLException {
         if (connection == null) {
             throw new IllegalArgumentException("Database connection is required");
@@ -74,9 +62,6 @@ public class ClientDAO {
         }
     }
 
-    /**
-     * Retrieves a client record by name.
-     */
     public Optional<Client> findClientByName(Connection connection, String name) throws SQLException {
         if (connection == null) {
             throw new IllegalArgumentException("Database connection is required");
@@ -96,9 +81,6 @@ public class ClientDAO {
         }
     }
 
-    /**
-     * Retrieves a client record by primary key ID.
-     */
     public Optional<Client> findClientById(Connection connection, long clientId) throws SQLException {
         if (connection == null) {
             throw new IllegalArgumentException("Database connection is required");
@@ -115,9 +97,6 @@ public class ClientDAO {
         }
     }
 
-    /**
-     * Checks if a client exists and is active.
-     */
     public Optional<Boolean> isClientActive(Connection connection, String name) throws SQLException {
         if (connection == null) {
             throw new IllegalArgumentException("Database connection is required");
@@ -137,9 +116,6 @@ public class ClientDAO {
         }
     }
 
-    /**
-     * Updates the active status of a client.
-     */
     public boolean setClientActive(Connection connection, long clientId, boolean active) throws SQLException {
         if (connection == null) {
             throw new IllegalArgumentException("Database connection is required");

@@ -66,6 +66,7 @@ public class RateLimitServlet extends HttpServlet {
         response.setCharacterEncoding("UTF-8");
 
         try {
+            // 1. Read the API key from the request header
             String apiKey = request.getHeader("X-API-Key");
 
             if (apiKey == null || apiKey.trim().isEmpty()) {
@@ -82,6 +83,7 @@ public class RateLimitServlet extends HttpServlet {
                 return;
             }
 
+            // 2. Validate optional tokens parameter if present
             String tokensParam = request.getParameter("tokens");
             if (tokensParam != null) {
                 try {
@@ -100,6 +102,7 @@ public class RateLimitServlet extends HttpServlet {
                 }
             }
 
+            // 3. Validate optional algorithm parameter if present
             String algoParam = request.getParameter("algorithm");
             if (algoParam != null && !algoParam.trim().isEmpty()) {
                 try {
@@ -112,6 +115,7 @@ public class RateLimitServlet extends HttpServlet {
                 }
             }
 
+            // 4. Authenticate the API key to get the client ID
             String clientId = authService.authenticate(apiKey);
             if (clientId == null) {
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
@@ -120,6 +124,7 @@ public class RateLimitServlet extends HttpServlet {
                 return;
             }
 
+            // 5. Look up the rate-limiting policy for this client
             long currentTimeMillis = System.currentTimeMillis();
             RateLimitPolicy policy = rateLimiterService.getPolicy(clientId);
             if (policy == null) {
@@ -129,6 +134,7 @@ public class RateLimitServlet extends HttpServlet {
                 return;
             }
 
+            // 6. Check if the request is allowed by the rate limiter
             RateLimitResult result = rateLimiterService.evaluate(clientId, currentTimeMillis);
             if (result == null) {
                 response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
@@ -137,10 +143,12 @@ public class RateLimitServlet extends HttpServlet {
                 return;
             }
 
+            // 7. Set standard rate limit headers
             response.setHeader("X-RateLimit-Limit", String.valueOf(policy.getLimit()));
             long remaining = (long) Math.max(0, Math.floor(result.getRemainingCapacity()));
             response.setHeader("X-RateLimit-Remaining", String.valueOf(remaining));
 
+            // 8. Return response based on whether request was allowed
             if (result.isAllowed()) {
                 response.setStatus(HttpServletResponse.SC_OK);
                 String json = String.format(

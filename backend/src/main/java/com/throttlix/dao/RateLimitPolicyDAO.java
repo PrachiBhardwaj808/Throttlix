@@ -10,9 +10,6 @@ import java.sql.Statement;
 import java.sql.Types;
 import java.util.Optional;
 
-/**
- * Data Access Object for rate-limit policies and client policy assignments in MySQL.
- */
 public class RateLimitPolicyDAO {
 
     private static final String FIND_ACTIVE_POLICY_SQL = """
@@ -67,12 +64,7 @@ public class RateLimitPolicyDAO {
             WHERE policy_id = ?
             """;
 
-    /**
-     * Finds the active policy assigned to a client.
-     * The caller owns the connection and is responsible for closing it.
-     */
-    public Optional<RateLimitPolicy> findActivePolicy(Connection connection, String clientId)
-            throws SQLException {
+    public Optional<RateLimitPolicy> findActivePolicy(Connection connection, String clientId) throws SQLException {
         if (connection == null) {
             throw new IllegalArgumentException("Database connection is required");
         }
@@ -93,15 +85,6 @@ public class RateLimitPolicyDAO {
         }
     }
 
-    /**
-     * Creates a new rate limit policy in MySQL.
-     * Uses Statement.RETURN_GENERATED_KEYS to obtain the assigned policy_id.
-     *
-     * @param connection active JDBC connection
-     * @param name       unique policy name
-     * @param policy     domain RateLimitPolicy object
-     * @return generated policy_id
-     */
     public long createPolicy(Connection connection, String name, RateLimitPolicy policy) throws SQLException {
         if (connection == null) {
             throw new IllegalArgumentException("Database connection is required");
@@ -141,9 +124,6 @@ public class RateLimitPolicyDAO {
         }
     }
 
-    /**
-     * Assigns a policy to a client using MySQL ON DUPLICATE KEY UPDATE.
-     */
     public boolean assignPolicyToClient(Connection connection, long clientId, long policyId) throws SQLException {
         if (connection == null) {
             throw new IllegalArgumentException("Database connection is required");
@@ -156,9 +136,6 @@ public class RateLimitPolicyDAO {
         }
     }
 
-    /**
-     * Updates an existing policy's parameters.
-     */
     public boolean updatePolicy(Connection connection, long policyId, RateLimitPolicy policy) throws SQLException {
         if (connection == null) {
             throw new IllegalArgumentException("Database connection is required");
@@ -184,9 +161,6 @@ public class RateLimitPolicyDAO {
         }
     }
 
-    /**
-     * Finds a policy by its primary key ID.
-     */
     public Optional<RateLimitPolicy> findPolicyById(Connection connection, long policyId, String clientName) throws SQLException {
         if (connection == null) {
             throw new IllegalArgumentException("Database connection is required");
@@ -228,14 +202,8 @@ public class RateLimitPolicyDAO {
 
         int limit = resultSet.getInt("request_limit");
         if (algorithmType == AlgorithmType.SLIDING_WINDOW) {
-            long windowMillis;
-            try {
-                windowMillis = Math.multiplyExact(resultSet.getLong("window_seconds"), 1_000L);
-            } catch (ArithmeticException exception) {
-                throw new SQLException("Policy window duration is too large", exception);
-            }
-            return RateLimitPolicy.createSlidingWindowPolicy(
-                    policyId, clientId, limit, windowMillis);
+            long windowMillis = Math.multiplyExact(resultSet.getLong("window_seconds"), 1_000L);
+            return RateLimitPolicy.createSlidingWindowPolicy(policyId, clientId, limit, windowMillis);
         }
 
         int refillTokens = resultSet.getInt("refill_tokens");
@@ -246,7 +214,6 @@ public class RateLimitPolicyDAO {
         if (resultSet.wasNull()) {
             throw new SQLException("Token Bucket policy is missing refill_duration_millis");
         }
-        return RateLimitPolicy.createTokenBucketPolicy(
-                policyId, clientId, limit, refillTokens, refillDurationMillis);
+        return RateLimitPolicy.createTokenBucketPolicy(policyId, clientId, limit, refillTokens, refillDurationMillis);
     }
 }

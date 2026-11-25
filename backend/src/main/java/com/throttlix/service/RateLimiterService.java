@@ -40,10 +40,10 @@ public class RateLimiterService {
         this.slidingWindowLimiter = slidingWindowLimiter;
         this.policyDAO = policyDAO;
         this.databaseConfig = databaseConfig;
-        initializeDefaultPolicies();
+        loadDefaultPolicies();
     }
 
-    private void initializeDefaultPolicies() {
+    private void loadDefaultPolicies() {
         clientPolicies.put("client-analytics", RateLimitPolicy.createTokenBucketPolicy(
                 "pol-analytics", "client-analytics", 10, 5, 1000
         ));
@@ -52,39 +52,30 @@ public class RateLimiterService {
         ));
     }
 
-    /**
-     * Resolves the active rate limit policy for a client.
-     * 1. Checks local cache / registered policies.
-     * 2. If not found, attempts to query MySQL via RateLimitPolicyDAO.
-     * 3. Returns null if no active policy exists.
-     *
-     * @param clientId client identifier
-     * @return active RateLimitPolicy or null
-     */
     public RateLimitPolicy getPolicy(String clientId) {
         if (clientId == null || clientId.isBlank()) {
             return null;
         }
 
-        String trimmedId = clientId.trim();
+        String cleanId = clientId.trim();
 
-        // 1. Check in-memory registered/cached policy first
-        RateLimitPolicy cached = clientPolicies.get(trimmedId);
+        // 1. Check in-memory registered policies first
+        RateLimitPolicy cached = clientPolicies.get(cleanId);
         if (cached != null) {
             return cached;
         }
 
-        // 2. Query active policy from MySQL via RateLimitPolicyDAO
+        // 2. Query active policy from MySQL database
         if (policyDAO != null && databaseConfig != null) {
             try (Connection connection = databaseConfig.getConnection()) {
-                Optional<RateLimitPolicy> dbPolicy = policyDAO.findActivePolicy(connection, trimmedId);
+                Optional<RateLimitPolicy> dbPolicy = policyDAO.findActivePolicy(connection, cleanId);
                 if (dbPolicy.isPresent()) {
                     RateLimitPolicy policy = dbPolicy.get();
-                    clientPolicies.put(trimmedId, policy);
+                    clientPolicies.put(cleanId, policy);
                     return policy;
                 }
             } catch (SQLException e) {
-                LOGGER.log(Level.WARNING, () -> "MySQL policy retrieval failed for client: " + trimmedId + " (" + e.getMessage() + ")");
+                LOGGER.log(Level.WARNING, () -> "MySQL policy retrieval failed for client: " + cleanId + " (" + e.getMessage() + ")");
             }
         }
 
@@ -103,6 +94,7 @@ public class RateLimiterService {
             return RateLimitResult.reject(0.0, null, "No rate limit policy found");
         }
 
+        // Choose the algorithm configured for this client
         if (policy.getAlgorithmType() == AlgorithmType.SLIDING_WINDOW) {
             return slidingWindowLimiter.allowRequest(policy, currentTimeMillis);
         }

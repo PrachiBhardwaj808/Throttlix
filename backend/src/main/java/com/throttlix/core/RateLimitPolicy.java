@@ -1,7 +1,4 @@
-
 package com.throttlix.core;
-
-import java.util.Objects;
 
 public class RateLimitPolicy {
 
@@ -32,32 +29,28 @@ public class RateLimitPolicy {
             throw new IllegalArgumentException("Client ID cannot be empty");
         }
 
-        this.algorithmType = Objects.requireNonNull(algorithmType);
+        if (algorithmType == null) {
+            throw new IllegalArgumentException("Algorithm type cannot be null");
+        }
 
         if (limit <= 0) {
             throw new IllegalArgumentException("Limit must be greater than 0");
         }
 
         if (algorithmType == AlgorithmType.SLIDING_WINDOW) {
-
             if (windowDurationMillis <= 0) {
                 throw new IllegalArgumentException("Window duration must be greater than 0");
             }
-
             this.windowDurationMillis = windowDurationMillis;
             this.refillTokens = 0;
             this.refillDurationMillis = 0;
-
         } else if (algorithmType == AlgorithmType.TOKEN_BUCKET) {
-
             if (refillTokens <= 0) {
                 throw new IllegalArgumentException("Refill tokens must be greater than 0");
             }
-
             if (refillDurationMillis <= 0) {
                 throw new IllegalArgumentException("Refill duration must be greater than 0");
             }
-
             this.windowDurationMillis = 0;
             this.refillTokens = refillTokens;
             this.refillDurationMillis = refillDurationMillis;
@@ -65,6 +58,7 @@ public class RateLimitPolicy {
 
         this.policyId = policyId.trim();
         this.clientId = clientId.trim();
+        this.algorithmType = algorithmType;
         this.limit = limit;
         this.enabled = enabled;
     }

@@ -7,10 +7,8 @@ import com.throttlix.core.RateLimiter;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-/** Enforces a request limit over a rolling time window for each client. */
 public class SlidingWindow implements RateLimiter {
 
-    // Each client gets a separate queue of request timestamps.
     private final ConcurrentMap<String, SlidingWindowState> clientStates = new ConcurrentHashMap<>();
 
     @Override
@@ -18,41 +16,48 @@ public class SlidingWindow implements RateLimiter {
         if (policy == null) {
             return RateLimitResult.reject(0.0, null, "Rate limit policy is required");
         }
+
         if (policy.getAlgorithmType() != AlgorithmType.SLIDING_WINDOW) {
             return RateLimitResult.reject(0.0, null, "Policy must use the Sliding Window algorithm");
         }
+
         if (!policy.isEnabled()) {
             return RateLimitResult.reject(0.0, null, "Rate limit policy is disabled");
         }
 
         String clientId = policy.getClientId();
-        SlidingWindowState state = clientStates.computeIfAbsent(clientId, id -> new SlidingWindowState());
+        SlidingWindowState state = clientStates.get(clientId);
 
-        // Keep operations for one client together so concurrent requests cannot pass the limit.
+        if (state == null) {
+            SlidingWindowState newState = new SlidingWindowState();
+            SlidingWindowState existing = clientStates.putIfAbsent(clientId, newState);
+            state = (existing != null) ? existing : newState;
+        }
+
         synchronized (state) {
             Long latestTimestamp = state.getLatestRequestTimestamp();
-            long safeCurrentTime = latestTimestamp == null
+            long safeCurrentTime = (latestTimestamp == null)
                     ? currentTimeMillis
                     : Math.max(currentTimeMillis, latestTimestamp);
 
             long windowDurationMillis = policy.getWindowDurationMillis();
             state.removeExpiredTimestamps(safeCurrentTime, windowDurationMillis);
 
-            int currentRequestCount = state.getRequestCount();
-            int remainingCapacity = policy.getLimit() - currentRequestCount;
+            int currentRequests = state.getRequestCount();
+            int maxRequests = policy.getLimit();
 
-            if (currentRequestCount < policy.getLimit()) {
+            if (currentRequests < maxRequests) {
                 state.addRequestTimestamp(safeCurrentTime);
-                return RateLimitResult.allow(remainingCapacity - 1,
-                        "Request allowed by Sliding Window");
+                int remainingRequests = maxRequests - currentRequests - 1;
+                return RateLimitResult.allow(remainingRequests, "Request allowed by Sliding Window");
             }
 
             Long oldestTimestamp = state.getOldestRequestTimestamp();
-            long retryAfterMillis = oldestTimestamp == null
+            long retryAfterMillis = (oldestTimestamp == null)
                     ? windowDurationMillis
                     : Math.max(0L, oldestTimestamp + windowDurationMillis - safeCurrentTime);
-            return RateLimitResult.reject(0.0, retryAfterMillis,
-                    "Sliding Window request limit exceeded");
+
+            return RateLimitResult.reject(0.0, retryAfterMillis, "Sliding Window request limit exceeded");
         }
     }
 }
