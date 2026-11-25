@@ -6,9 +6,13 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Types;
 import java.util.Optional;
 
-/** Loads the active rate-limit policy assigned to a client. */
+/**
+ * Data Access Object for rate-limit policies and client policy assignments in MySQL.
+ */
 public class RateLimitPolicyDAO {
 
     private static final String FIND_ACTIVE_POLICY_SQL = """
@@ -26,6 +30,41 @@ public class RateLimitPolicyDAO {
             WHERE c.name = ?
               AND c.active = TRUE
               AND p.enabled = TRUE
+            """;
+
+    private static final String INSERT_POLICY_SQL = """
+            INSERT INTO rate_limit_policies (
+                name, algorithm, request_limit, window_seconds,
+                refill_tokens, refill_duration_millis, enabled
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """;
+
+    private static final String ASSIGN_POLICY_SQL = """
+            INSERT INTO client_policies (client_id, policy_id)
+            VALUES (?, ?)
+            ON DUPLICATE KEY UPDATE policy_id = VALUES(policy_id), assigned_at = CURRENT_TIMESTAMP
+            """;
+
+    private static final String UPDATE_POLICY_SQL = """
+            UPDATE rate_limit_policies
+            SET request_limit = ?,
+                window_seconds = ?,
+                refill_tokens = ?,
+                refill_duration_millis = ?
+            WHERE policy_id = ?
+            """;
+
+    private static final String FIND_POLICY_BY_ID_SQL = """
+            SELECT policy_id,
+                   name,
+                   algorithm,
+                   request_limit,
+                   window_seconds,
+                   refill_tokens,
+                   refill_duration_millis,
+                   enabled
+            FROM rate_limit_policies
+            WHERE policy_id = ?
             """;
 
     /**
@@ -50,6 +89,129 @@ public class RateLimitPolicyDAO {
                 }
 
                 return Optional.of(mapPolicy(resultSet));
+            }
+        }
+    }
+
+    /**
+     * Creates a new rate limit policy in MySQL.
+     * Uses Statement.RETURN_GENERATED_KEYS to obtain the assigned policy_id.
+     *
+     * @param connection active JDBC connection
+     * @param name       unique policy name
+     * @param policy     domain RateLimitPolicy object
+     * @return generated policy_id
+     */
+    public long createPolicy(Connection connection, String name, RateLimitPolicy policy) throws SQLException {
+        if (connection == null) {
+            throw new IllegalArgumentException("Database connection is required");
+        }
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("Policy name is required");
+        }
+        if (policy == null) {
+            throw new IllegalArgumentException("Policy object is required");
+        }
+
+        try (PreparedStatement statement = connection.prepareStatement(INSERT_POLICY_SQL, Statement.RETURN_GENERATED_KEYS)) {
+            statement.setString(1, name.trim());
+            statement.setString(2, policy.getAlgorithmType().name());
+            statement.setInt(3, policy.getLimit());
+
+            if (policy.getAlgorithmType() == AlgorithmType.SLIDING_WINDOW) {
+                int windowSeconds = (int) Math.max(1L, policy.getWindowDurationMillis() / 1000L);
+                statement.setInt(4, windowSeconds);
+                statement.setNull(5, Types.INTEGER);
+                statement.setNull(6, Types.BIGINT);
+            } else {
+                statement.setInt(4, 1);
+                statement.setInt(5, policy.getRefillTokens());
+                statement.setLong(6, policy.getRefillDurationMillis());
+            }
+
+            statement.setBoolean(7, true);
+            statement.executeUpdate();
+
+            try (ResultSet keys = statement.getGeneratedKeys()) {
+                if (keys.next()) {
+                    return keys.getLong(1);
+                }
+                throw new SQLException("Failed to obtain generated policy_id");
+            }
+        }
+    }
+
+    /**
+     * Assigns a policy to a client using MySQL ON DUPLICATE KEY UPDATE.
+     */
+    public boolean assignPolicyToClient(Connection connection, long clientId, long policyId) throws SQLException {
+        if (connection == null) {
+            throw new IllegalArgumentException("Database connection is required");
+        }
+
+        try (PreparedStatement statement = connection.prepareStatement(ASSIGN_POLICY_SQL)) {
+            statement.setLong(1, clientId);
+            statement.setLong(2, policyId);
+            return statement.executeUpdate() > 0;
+        }
+    }
+
+    /**
+     * Updates an existing policy's parameters.
+     */
+    public boolean updatePolicy(Connection connection, long policyId, RateLimitPolicy policy) throws SQLException {
+        if (connection == null) {
+            throw new IllegalArgumentException("Database connection is required");
+        }
+        if (policy == null) {
+            throw new IllegalArgumentException("Policy object is required");
+        }
+
+        try (PreparedStatement statement = connection.prepareStatement(UPDATE_POLICY_SQL)) {
+            statement.setInt(1, policy.getLimit());
+            if (policy.getAlgorithmType() == AlgorithmType.SLIDING_WINDOW) {
+                int windowSeconds = (int) Math.max(1L, policy.getWindowDurationMillis() / 1000L);
+                statement.setInt(2, windowSeconds);
+                statement.setNull(3, Types.INTEGER);
+                statement.setNull(4, Types.BIGINT);
+            } else {
+                statement.setInt(2, 1);
+                statement.setInt(3, policy.getRefillTokens());
+                statement.setLong(4, policy.getRefillDurationMillis());
+            }
+            statement.setLong(5, policyId);
+            return statement.executeUpdate() > 0;
+        }
+    }
+
+    /**
+     * Finds a policy by its primary key ID.
+     */
+    public Optional<RateLimitPolicy> findPolicyById(Connection connection, long policyId, String clientName) throws SQLException {
+        if (connection == null) {
+            throw new IllegalArgumentException("Database connection is required");
+        }
+
+        try (PreparedStatement statement = connection.prepareStatement(FIND_POLICY_BY_ID_SQL)) {
+            statement.setLong(1, policyId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (!resultSet.next()) {
+                    return Optional.empty();
+                }
+
+                String pId = String.valueOf(resultSet.getLong("policy_id"));
+                String cName = (clientName != null && !clientName.isBlank()) ? clientName : "client-" + pId;
+                AlgorithmType algorithmType = AlgorithmType.valueOf(resultSet.getString("algorithm"));
+                int limit = resultSet.getInt("request_limit");
+
+                if (algorithmType == AlgorithmType.SLIDING_WINDOW) {
+                    long windowMillis = Math.multiplyExact(resultSet.getLong("window_seconds"), 1000L);
+                    return Optional.of(RateLimitPolicy.createSlidingWindowPolicy(pId, cName, limit, windowMillis));
+                }
+
+                int refillTokens = resultSet.getInt("refill_tokens");
+                long refillDurationMillis = resultSet.getLong("refill_duration_millis");
+                return Optional.of(RateLimitPolicy.createTokenBucketPolicy(pId, cName, limit, refillTokens, refillDurationMillis));
             }
         }
     }

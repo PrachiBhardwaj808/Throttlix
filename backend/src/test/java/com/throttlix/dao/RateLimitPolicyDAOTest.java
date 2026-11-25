@@ -77,6 +77,70 @@ class RateLimitPolicyDAOTest {
                 () -> policyDAO.findActivePolicy(query.connection(), "client-a"));
     }
 
+    @Test
+    void shouldCreateSlidingWindowPolicyAndReturnGeneratedKey() throws SQLException {
+        ResultSet keysRs = proxy(ResultSet.class, (p, m, a) -> switch (m.getName()) {
+            case "next" -> true;
+            case "getLong" -> 88L;
+            case "close" -> null;
+            default -> null;
+        });
+
+        PreparedStatement stmt = proxy(PreparedStatement.class, (p, m, a) -> switch (m.getName()) {
+            case "setString", "setInt", "setNull", "setBoolean" -> null;
+            case "executeUpdate" -> 1;
+            case "getGeneratedKeys" -> keysRs;
+            case "close" -> null;
+            default -> null;
+        });
+
+        Connection connection = proxy(Connection.class, (p, m, a) -> {
+            if ("prepareStatement".equals(m.getName())) return stmt;
+            return null;
+        });
+
+        RateLimitPolicy policy = RateLimitPolicy.createSlidingWindowPolicy("pol-sw", "client-sw", 100, 60_000L);
+        long policyId = policyDAO.createPolicy(connection, "pol-sw", policy);
+        assertEquals(88L, policyId);
+    }
+
+    @Test
+    void shouldAssignPolicyToClient() throws SQLException {
+        PreparedStatement stmt = proxy(PreparedStatement.class, (p, m, a) -> switch (m.getName()) {
+            case "setLong" -> null;
+            case "executeUpdate" -> 1;
+            case "close" -> null;
+            default -> null;
+        });
+
+        Connection connection = proxy(Connection.class, (p, m, a) -> {
+            if ("prepareStatement".equals(m.getName())) return stmt;
+            return null;
+        });
+
+        boolean assigned = policyDAO.assignPolicyToClient(connection, 1L, 88L);
+        assertTrue(assigned);
+    }
+
+    @Test
+    void shouldUpdatePolicy() throws SQLException {
+        PreparedStatement stmt = proxy(PreparedStatement.class, (p, m, a) -> switch (m.getName()) {
+            case "setInt", "setLong", "setNull" -> null;
+            case "executeUpdate" -> 1;
+            case "close" -> null;
+            default -> null;
+        });
+
+        Connection connection = proxy(Connection.class, (p, m, a) -> {
+            if ("prepareStatement".equals(m.getName())) return stmt;
+            return null;
+        });
+
+        RateLimitPolicy policy = RateLimitPolicy.createTokenBucketPolicy("pol-tb", "client-tb", 200, 10, 1000L);
+        boolean updated = policyDAO.updatePolicy(connection, 88L, policy);
+        assertTrue(updated);
+    }
+
     private Map<String, Object> row(String algorithm, long windowSeconds,
                                     Integer refillTokens, Long refillDurationMillis) {
         Map<String, Object> values = new HashMap<>();
